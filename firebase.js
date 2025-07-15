@@ -26,13 +26,13 @@ import {
 
 // ---- Your Firebase config ----
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_BUCKET",
-  messagingSenderId: "YOUR_MSG_ID",
-  appId: "YOUR_APP_ID",
-  databaseURL: "YOUR_DB_URL"
+  apiKey: "AIzaSyDWbWkOSY5IA3LQuSjW5pFD0XQOWmK8mAE",
+  authDomain: "chess-online-ac582.firebaseapp.com",
+  databaseURL: "https://chess-online-ac582-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "chess-online-ac582",
+  storageBucket: "chess-online-ac582.firebasestorage.app",
+  messagingSenderId: "804954664189",
+  appId: "1:804954664189:web:b45d833a39337ce8a6e294"
 };
 
 const app = initializeApp(firebaseConfig);
