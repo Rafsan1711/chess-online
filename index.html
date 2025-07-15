@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Online Chess Multiplayer</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* বেসিক স্টাইল, তুমি চাইলে তোমার styles.css এ রাখতে পারো */
+    body {
+      margin: 0; background: #000; color: #fff; font-family: sans-serif;
+    }
+    .hidden { display: none !important; }
+    .flex { display: flex; }
+    .items-center { align-items: center; }
+    .justify-center { justify-content: center; }
+    .gap-2 { gap: 0.5rem; }
+    .text-center { text-align: center; }
+    .btn {
+      background: #333; border: none; color: white;
+      padding: 10px 16px; cursor: pointer;
+      border-radius: 6px;
+      transition: background 0.3s;
+    }
+    .btn:hover { background: #555; }
+    .modal {
+      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(0,0,0,0.8);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1000;
+    }
+    .modal-content {
+      background: #222; padding: 20px; border-radius: 8px;
+      max-width: 90vw; max-height: 80vh; overflow-y: auto;
+      position: relative;
+      box-shadow: 0 0 10px #0f0;
+    }
+    .modal-content button.close-btn {
+      position: absolute; top: 10px; right: 12px; background: none;
+      border: none; color: #fff; font-size: 24px; cursor: pointer;
+    }
+    #toast-container {
+      position: fixed; bottom: 20px; right: 20px; z-index: 2000;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .toast {
+      background: #444; padding: 10px 16px; border-radius: 6px;
+      box-shadow: 0 0 5px #0f0;
+      cursor: pointer;
+      user-select: none;
+    }
+    .toast-info { background: #333; }
+    .toast-error { background: #a00; }
+    .toast-success { background: #0a0; }
+
+    /* Loading Spinner */
+    .loader {
+      border: 8px solid #222;
+      border-top: 8px solid #0f0;
+      border-radius: 50%;
+      width: 60px; height: 60px;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Simple chess board container */
+    #board-container {
+      width: 320px; height: 320px; background: #eee; border: 2px solid #0f0;
+      margin: 10px 0;
+      position: relative;
+    }
+
+    /* Notification Dropdown */
+    #notif-dropdown {
+      background: #222; color: #eee; width: 220px;
+      max-height: 250px; overflow-y: auto;
+      border-radius: 6px; box-shadow: 0 0 10px #0f0;
+      margin-top: 8px;
+      padding: 8px;
+    }
+
+    /* User Search Results */
+    #user-search-results {
+      max-height: 200px; overflow-y: auto;
+      background: #222;
+      border-radius: 6px;
+      box-shadow: 0 0 8px #0f0;
+      z-index: 100;
+    }
+    #user-search-results div {
+      padding: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid #444;
+    }
+    #user-search-results div:hover {
+      background: #0f0a0f;
+    }
+    #user-search-results img {
+      width: 32px; height: 32px; border-radius: 50%;
+    }
+
+    /* Opponent Info */
+    #opponent-info img {
+      width: 32px; height: 32px; border-radius: 50%;
+    }
+
+    /* Clocks */
+    .clock {
+      font-size: 1.5rem; font-weight: bold; padding: 6px 12px;
+      background: #222; border-radius: 6px; user-select: none;
+      min-width: 80px; text-align: center;
+    }
+    .active-clock { border: 2px solid #0f0; }
+    .inactive-clock { border: 2px solid #555; }
+
+    /* Captured pieces area */
+    .captured {
+      min-height: 20px; display: flex; gap: 2px; justify-content: center;
+    }
+
+    /* Chat Section */
+    #chat-screen {
+      max-width: 400px; margin: 20px auto;
+      background: #111; padding: 10px; border-radius: 8px;
+      box-shadow: 0 0 10px #0f0;
+    }
+    #chat-box {
+      height: 150px; overflow-y: auto; background: #222; padding: 6px;
+      border-radius: 6px; color: #eee;
+      margin-bottom: 10px;
+      font-family: monospace;
+    }
+    #chat-input {
+      flex-grow: 1; padding: 8px; border-radius: 6px;
+      border: none; background: #333; color: white;
+    }
+    #chat-send-btn {
+      background: #0f0; color: black; border: none; padding: 8px 12px;
+      border-radius: 6px; cursor: pointer;
+      margin-left: 6px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 🔔 Notification Bell -->
+  <div id="notification-area" style="position: fixed; top: 10px; right: 10px; z-index: 1000;">
+    <button id="notif-bell" class="btn">🔔</button>
+    <div id="notif-dropdown" class="hidden"></div>
+  </div>
+
+  <!-- 🏠 Home Screen -->
+  <section id="home-screen" class="flex flex-col items-center gap-4" style="height: 100vh; justify-content: center;">
+    <h1 style="font-size: 2rem; margin-bottom: 20px;">Welcome to Online Chess Multiplayer</h1>
+    <button id="play-2p" class="btn w-48">Play 2-Player</button>
+    <button id="play-4p" class="btn w-48">Play 4-Player</button>
+    <button id="leaderboard-btn" class="btn w-48">Leaderboard</button>
+    <button id="settings-btn" class="btn w-48">Settings</button>
+    <button id="sign-in-btn" class="btn w-48">Sign in with Google</button>
+    <button id="sign-out-btn" class="btn w-48 hidden">Sign Out</button>
+    <div id="user-display" style="margin-top: 15px; font-weight: bold;"></div>
+  </section>
+
+  <!-- ♟️ Game Screen -->
+  <section id="game-screen" class="hidden flex flex-col items-center gap-2 p-4">
+    <div id="opponent-info" class="flex items-center justify-center mb-2 gap-2">
+      <img id="opponent-avatar" class="hidden" alt="Opponent Avatar" />
+      <span id="opponent-name" class="font-semibold"></span>
+      <span id="opponent-rating" class="text-gray-400 text-sm"></span>
+    </div>
+    <div id="captured-white" class="captured"></div>
+    <div class="clock-container">
+      <div id="black-clock" class="clock active-clock">10:00</div>
+    </div>
+    <div id="board-container"></div>
+    <div class="clock-container">
+      <div id="white-clock" class="clock inactive-clock">10:00</div>
+    </div>
+    <div id="captured-black" class="captured"></div>
+
+    <!-- Chat Section -->
+    <div id="chat-screen" class="mt-6 w-full max-w-xl mx-auto bg-gray-900 p-3 rounded-lg shadow-lg">
+      <div id="chat-box" class="h-48 overflow-y-auto mb-2"></div>
+      <div class="flex gap-2">
+        <input id="chat-input" type="text" placeholder="Type..." class="flex-1 p-2 rounded bg-gray-700 text-white" />
+        <button id="chat-send-btn" class="bg-green-600 px-3 py-1 rounded">Send</button>
+      </div>
+    </div>
+
+    <button id="back-to-home-btn" class="btn mt-6 w-48">Back to Home</button>
+  </section>
+
+  <!-- 📜 Leaderboard Modal -->
+  <div id="leaderboard-modal" class="modal hidden">
+    <div class="modal-content">
+      <button id="close-leaderboard" class="close-btn">×</button>
+      <h2 class="text-xl mb-4 text-center">Leaderboard</h2>
+      <ul id="leaderboard-list" style="list-style:none; padding:0; max-height: 400px; overflow-y: auto;"></ul>
+    </div>
+  </div>
+
+  <!-- ⚙️ Settings Modal -->
+  <div id="settings-modal" class="modal hidden">
+    <div class="modal-content">
+      <button id="close-settings" class="close-btn">×</button>
+      <h2 class="text-xl mb-4 text-center">Settings</h2>
+      <label class="block mb-2" for="theme-select">Theme</label>
+      <select id="theme-select" class="w-full p-2 bg-gray-700 text-white rounded mb-4">
+        <option value="light">Light</option>
+        <option value="dark" selected>Dark</option>
+      </select>
+      <div class="mb-4">
+        <input type="checkbox" id="notify-sound-checkbox" checked />
+        <label for="notify-sound-checkbox" class="ml-2">Enable Notification Sound</label>
+      </div>
+      <button id="save-settings-btn" class="btn w-full">Save</button>
+    </div>
+  </div>
+
+  <!-- 👤 Profile Modal -->
+  <div id="profile-modal" class="modal hidden">
+    <div class="modal-content flex flex-col items-center">
+      <button id="close-profile-btn" class="close-btn">×</button>
+      <img id="profile-pic" class="w-20 h-20 rounded-full mb-3" src="" alt="Profile Picture" />
+      <h2 id="profile-name" class="text-xl font-semibold mb-1"></h2>
+      <p id="profile-rating" class="text-gray-400 mb-4">Rating: 0</p>
+      <div class="grid grid-cols-3 gap-4 text-center mb-4">
+        <div>
+          <p id="total-games">0</p>
+          <p class="text-sm">Games</p>
+        </div>
+        <div>
+          <p id="total-wins">0</p>
+          <p class="text-sm">Wins</p>
+        </div>
+        <div>
+          <p id="total-losses">0</p>
+          <p class="text-sm">Losses</p>
+        </div>
+      </div>
+      <button id="view-history" class="btn w-full">Match History</button>
+    </div>
+  </div>
+
+  <!-- 📜 Match History Modal -->
+  <div id="match-history-modal" class="modal hidden">
+    <div class="modal-content w-[90%] max-w-2xl max-h-[80vh] overflow-auto">
+      <button id="close-match-history" class="close-btn">×</button>
+      <h2 class="text-xl mb-4 text-center">Match History</h2>
+      <div id="match-history-list" class="divide-y divide-gray-600"></div>
+    </div>
+  </div>
+
+  <!-- 🔍 User Search -->
+  <div class="relative w-64 mx-auto mt-6">
+    <input
+      id="user-search-input"
+      type="text"
+      placeholder="Search users..."
+      class="w-full p-2 bg-gray-700 rounded text-white"
+      autocomplete="off"
+    />
+    <div id="user-search-results" class="absolute bg-gray-800 w-full mt-1 rounded hidden z-50"></div>
+  </div>
+
+  <!-- 🔊 Audio Elements -->
+  <audio id="move-sound" src="sounds/move.mp3" preload="auto"></audio>
+  <audio id="capture-sound" src="sounds/capture.mp3" preload="auto"></audio>
+  <audio id="check-sound" src="sounds/check.mp3" preload="auto"></audio>
+  <audio id="promote-sound" src="sounds/promote.mp3" preload="auto"></audio>
+  <audio id="castle-sound" src="sounds/castle.mp3" preload="auto"></audio>
+  <audio id="start-sound" src="sounds/start.mp3" preload="auto"></audio>
+  <audio id="win-sound" src="sounds/win.mp3" preload="auto"></audio>
+  <audio id="lose-sound" src="sounds/lose.mp3" preload="auto"></audio>
+  <audio id="draw-sound" src="sounds/draw.mp3" preload="auto"></audio>
+
+  <!-- 🔔 Toast Container -->
+  <div id="toast-container"></div>
+
+  <!-- ⏳ Loading Spinner -->
+  <div
+    id="loading-spinner"
+    class="hidden"
+    style="
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1500;
+    "
+  >
+    <div class="loader"></div>
+  </div>
+
+  <!-- Main Script -->
+  <script type="module" src="main.js"></script>
+
+</body>
+</html>
