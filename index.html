@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Online Chess Game</title>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/1.0.0/chess.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard.min.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 20px;
+        }
+        #board {
+            margin: 20px auto;
+        }
+        #status {
+            margin-top: 20px;
+            font-size: 18px;
+        }
+        button {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Online Chess Game</h1>
+    <div id="status">Connecting...</div>
+    <div id="board" style="width: 400px"></div>
+    <button id="logout-btn" style="display: none;">Logout</button>
+
+    <script>
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            databaseURL: "YOUR_DATABASE_URL",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // Initialize Firebase
+        const app = firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const database = firebase.database();
+
+        const statusElement = document.getElementById("status");
+        const logoutBtn = document.getElementById("logout-btn");
+
+        let gameId = null;
+        let isPlayerWhite = null;
+        const chess = new Chess();
+        let board = null;
+
+        // Update board position based on FEN
+        function updateBoard() {
+            board.position(chess.fen());
+        }
+
+        // Handle move from player
+        function onDrop(source, target) {
+            const move = chess.move({
+                from: source,
+                to: target,
+                promotion: 'q' // Always promote to a queen for simplicity
+            });
+
+            if (move === null) return 'snapback'; // Invalid move
+
+            // Update move in Firebase
+            database.ref(`games/${gameId}/moves`).push({
+                from: source,
+                to: target,
+                fen: chess.fen()
+            });
+        }
+
+        // Monitor moves from Firebase
+        function monitorMoves() {
+            database.ref(`games/${gameId}/moves`).on("child_added", (snapshot) => {
+                const move = snapshot.val();
+
+                // Only update the board if it's the opponent's turn
+                if (chess.turn() !== (isPlayerWhite ? 'w' : 'b')) {
+                    chess.move({ from: move.from, to: move.to });
+                    updateBoard();
+                }
+            });
+        }
+
+        // Start a new game
+        function startGame() {
+            const gameRef = database.ref("games").push();
+            gameId = gameRef.key;
+            isPlayerWhite = true;
+            statusElement.textContent = "Game started! You are white.";
+            monitorMoves();
+        }
+
+        // Join an existing game
+        function joinGame(gameIdToJoin) {
+            gameId = gameIdToJoin;
+            isPlayerWhite = false;
+            statusElement.textContent = "Game joined! You are black.";
+            monitorMoves();
+        }
+
+        // Check for available games
+        function checkForGames() {
+            database.ref("games").once("value", (snapshot) => {
+                const games = snapshot.val();
+                const availableGame = games && Object.keys(games).find((key) => !games[key].started);
+
+                if (availableGame) {
+                    joinGame(availableGame);
+                    database.ref(`games/${availableGame}`).update({ started: true });
+                } else {
+                    startGame();
+                }
+            });
+        }
+
+        // Authentication state listener
+        auth.onAuthStateChanged((user) => {
+            if (user) {
+                logoutBtn.style.display = "block";
+                statusElement.textContent = "Looking for a game...";
+                checkForGames();
+            } else {
+                logoutBtn.style.display = "none";
+                statusElement.textContent = "Please sign in.";
+                auth.signInAnonymously();
+            }
+        });
+
+        // Logout button
+        logoutBtn.addEventListener("click", () => {
+            auth.signOut();
+        });
+
+        // Initialize chess board
+        board = Chessboard('board', {
+            draggable: true,
+            dropOffBoard: 'snapback',
+            position: 'start',
+            onDrop: onDrop
+        });
+    </script>
+</body>
+</html>
