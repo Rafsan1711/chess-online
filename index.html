@@ -1,157 +1,1438 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Online Chess Game</title>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/1.0.0/chess.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard.min.css">
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            margin: 20px;
-        }
-        #board {
-            margin: 20px auto;
-        }
-        #status {
-            margin-top: 20px;
-            font-size: 18px;
-        }
-        button {
-            margin-top: 10px;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Online Multiplayer Chess with Firebase Auth & Realtime DB</title>
+  <style>
+    /* ===== BASIC RESET ===== */
+    * {
+      box-sizing: border-box;
+      margin: 0; padding: 0;
+    }
+    body {
+      background-color: #222;
+      color: white;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 1rem;
+      position: relative;
+    }
+    h1 {
+      margin-bottom: 1rem;
+      font-size: 1.8rem;
+      text-align: center;
+    }
+    #login-container {
+      margin-bottom: 20px;
+      background: #333;
+      padding: 1rem 2rem;
+      border-radius: 8px;
+      text-align: center;
+      max-width: 320px;
+      width: 100%;
+    }
+    #login-btn {
+      background-color: #4285f4;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 10px 20px;
+      font-size: 1rem;
+      cursor: pointer;
+      user-select: none;
+    }
+    #login-btn:hover {
+      background-color: #3367d6;
+    }
+    #user-info {
+      margin-top: 10px;
+      font-size: 1rem;
+    }
+    #logout-btn {
+      background-color: #ff4444;
+      border: none;
+      border-radius: 4px;
+      color: white;
+      padding: 6px 12px;
+      cursor: pointer;
+      user-select: none;
+      margin-top: 10px;
+      display: none;
+    }
+    #logout-btn:hover {
+      background-color: #cc0000;
+    }
+    /* Captured pieces container */
+    .captured {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      min-height: 2rem;
+      margin: 0.5rem 0;
+      gap: 0.25rem;
+    }
+    .captured img {
+      width: 2rem;
+      height: 2rem;
+      user-select: none;
+      pointer-events: none;
+    }
+    /* Clock styles */
+    .clock-container {
+      width: 100%;
+      max-width: 480px;
+      display: flex;
+      justify-content: center;
+      margin: 0.25rem 0;
+    }
+    .clock {
+      width: 100%;
+      max-width: 200px;
+      padding: 0.5rem 1rem;
+      text-align: center;
+      border: 2px solid white;
+      border-radius: 4px;
+      font-family: monospace;
+      background-color: #333;
+      color: #eee;
+      font-size: 1rem;
+      margin: 30px 0 30px 0;
+      user-select: none;
+    }
+    .active-clock {
+      background-color: white;
+      color: black;
+      font-size: 1.5rem;
+      border-color: #fff;
+    }
+    .inactive-clock {
+      background-color: #333;
+      color: #aaa;
+      font-size: 1rem;
+      border-color: #555;
+    }
+    /* Board container */
+    #board-container {
+      width: 100%;
+      max-width: 480px;
+      aspect-ratio: 1 / 1;
+      border: 2px solid white;
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      grid-template-rows: repeat(8, 1fr);
+      user-select: none;
+    }
+    .square {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0; /* hide whitespace */
+      cursor: pointer;
+    }
+    /* Gradient dark→light for board squares */
+    .square[data-col="0"].light, .square[data-col="1"].light, .square[data-col="2"].light,
+    .square[data-col="3"].light, .square[data-col="4"].light, .square[data-col="5"].light,
+    .square[data-col="6"].light, .square[data-col="7"].light {
+      background-color: #f0d9b5;
+    }
+    .square[data-col="0"].dark, .square[data-col="1"].dark, .square[data-col="2"].dark,
+    .square[data-col="3"].dark, .square[data-col="4"].dark, .square[data-col="5"].dark,
+    .square[data-col="6"].dark, .square[data-col="7"].dark {
+      background-color: #b58863;
+    }
+    .selected {
+      outline: 3px solid yellow;
+      z-index: 2;
+    }
+    .highlight {
+      background-color: rgba(255, 255, 0, 0.4);
+      z-index: 1;
+    }
+    img.piece {
+      width: 90%;
+      height: 90%;
+      user-select: none;
+      -webkit-user-drag: none;
+      pointer-events: none;
+    }
+    /* Modal styles */
+    #winner-modal {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      background-color: rgba(0,0,0,0.8);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    #winner-modal .modal-content {
+      background-color: #111;
+      padding: 2rem;
+      border: 2px solid white;
+      border-radius: 8px;
+      text-align: center;
+      max-width: 80%;
+      color: #4d94ff;
+      user-select: none;
+    }
+    #winner-modal .modal-content h2 {
+      margin-bottom: 1rem;
+      font-size: 2rem;
+      color: #ff4d4d;
+    }
+    #winner-modal .modal-content button {
+      margin-top: 1rem;
+      padding: 0.5rem 1rem;
+      font-size: 1rem;
+      background-color: #fff;
+      color: #000;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      user-select: none;
+    }
+    #winner-modal .modal-content button:hover {
+      background-color: #ddd;
+    }
+  </style>
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
 </head>
 <body>
-    <h1>Online Chess Game</h1>
-    <div id="status">Connecting...</div>
-    <div id="board" style="width: 400px"></div>
-    <button id="logout-btn" style="display: none;">Logout</button>
+  <h1>♟ Online Multiplayer Chess ♟</h1>
 
-    <script>
-        // Firebase configuration
-        const firebaseConfig = {
-            apiKey: "YOUR_API_KEY",
-            authDomain: "YOUR_AUTH_DOMAIN",
-            databaseURL: "YOUR_DATABASE_URL",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_STORAGE_BUCKET",
-            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-            appId: "YOUR_APP_ID"
-        };
+  <!-- Login UI -->
+  <div id="login-container">
+    <button id="login-btn">Login with Google</button>
+    <div id="user-info"></div>
+    <button id="logout-btn">Logout</button>
+  </div>
 
-        // Initialize Firebase
-        const app = firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
-        const database = firebase.database();
+  <!-- Captured White Pieces -->
+  <div id="captured-white" class="captured"></div>
 
-        const statusElement = document.getElementById("status");
-        const logoutBtn = document.getElementById("logout-btn");
+  <!-- Black's Clock -->
+  <div class="clock-container">
+    <div id="black-clock" class="clock active-clock">10:00</div>
+  </div>
 
-        let gameId = null;
-        let isPlayerWhite = null;
-        const chess = new Chess();
-        let board = null;
+  <!-- Board -->
+  <div id="board-container"></div>
+<div id="move-list" style="max-height: 200px; overflow-y: auto; background: #eee; padding: 8px; border: 1px solid #ccc; margin-top: 10px;"></div>
+<button id="clear-history-btn">Clear Move History</button>
+<button id="undo-btn">Undo Move</button>
 
-        // Update board position based on FEN
-        function updateBoard() {
-            board.position(chess.fen());
+  <!-- White's Clock -->
+  <div class="clock-container">
+    <div id="white-clock" class="clock inactive-clock">10:00</div>
+  </div>
+
+  <!-- Captured Black Pieces -->
+  <div id="captured-black" class="captured"></div>
+
+  <!-- Winner Modal -->
+  <div id="winner-modal">
+    <div class="modal-content">
+      <h2 id="winner-text">Winner: </h2>
+      <button id="modal-restart-btn">Play Again</button>
+    </div>
+  </div>
+
+  <script>
+    // Firebase configuration (তোমার ফায়ারবেস প্রোজেক্ট অনুযায়ী বদলাতে হবে)
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY_HERE",
+      authDomain: "YOUR_AUTH_DOMAIN_HERE",
+      databaseURL: "YOUR_DATABASE_URL_HERE",
+      projectId: "YOUR_PROJECT_ID_HERE",
+      storageBucket: "YOUR_STORAGE_BUCKET_HERE",
+      messagingSenderId: "YOUR_SENDER_ID_HERE",
+      appId: "YOUR_APP_ID_HERE"
+    };
+    firebase.initializeApp(firebaseConfig);
+
+    const auth = firebase.auth();
+    const database = firebase.database();
+
+    const loginBtn = document.getElementById('login-btn');
+    const logoutBtn = document.getElementById('logout-btn');
+    const userInfoDiv = document.getElementById('user-info');
+
+    loginBtn.addEventListener('click', () => {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      auth.signInWithPopup(provider).catch(console.error);
+    });
+    logoutBtn.addEventListener('click', () => {
+      auth.signOut().catch(console.error);
+    });
+
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        userInfoDiv.textContent = `Logged in as: ${user.displayName}`;
+        loginBtn.style.display = 'none';
+        logoutBtn.style.display = 'inline-block';
+        // TODO: লোড খেলোয়ারের ডাটা (রেটিং, ইউজারনেম) এবং গেম স্টেট
+        onUserLoggedIn(user);
+      } else {
+        userInfoDiv.textContent = '';
+        loginBtn.style.display = 'inline-block';
+        logoutBtn.style.display = 'none';
+        onUserLoggedOut();
+      }
+    });
+
+    // TODO: পরবর্তী পার্টে গেম স্টেট এবং ফায়ারবেস রিয়েলটাইম ডাটাবেস লজিক যুক্ত করবো
+  
+
+  // ========================
+  // Chess pieces SVG icon URLs (বা img src links)
+  // তোমার প্রয়োজনে png/svg দিতে পারো, আমি উদাহরণ দিলাম png গুলো
+  const pieceImages = {
+    'wP': 'https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_plt60.png',
+    'wR': 'https://upload.wikimedia.org/wikipedia/commons/7/72/Chess_rlt60.png',
+    'wN': 'https://upload.wikimedia.org/wikipedia/commons/7/70/Chess_nlt60.png',
+    'wB': 'https://upload.wikimedia.org/wikipedia/commons/b/b1/Chess_blt60.png',
+    'wQ': 'https://upload.wikimedia.org/wikipedia/commons/1/15/Chess_qlt60.png',
+    'wK': 'https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt60.png',
+    'bP': 'https://upload.wikimedia.org/wikipedia/commons/c/c7/Chess_pdt60.png',
+    'bR': 'https://upload.wikimedia.org/wikipedia/commons/f/ff/Chess_rdt60.png',
+    'bN': 'https://upload.wikimedia.org/wikipedia/commons/e/ef/Chess_ndt60.png',
+    'bB': 'https://upload.wikimedia.org/wikipedia/commons/9/98/Chess_bdt60.png',
+    'bQ': 'https://upload.wikimedia.org/wikipedia/commons/4/47/Chess_qdt60.png',
+    'bK': 'https://upload.wikimedia.org/wikipedia/commons/f/f0/Chess_kdt60.png'
+  };
+
+  // Chessboard 8x8 array initial position (FEN-style simple)
+  // null means empty square
+  // Capital letters for White, lowercase for Black (used in validation)
+  // But here we use custom notation: 'wP', 'bK' etc.
+  const initialBoard = [
+    ['bR', 'bN', 'bB', 'bQ', 'bK', 'bB', 'bN', 'bR'],
+    ['bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP', 'bP'],
+    [null, null, null, null, null, null, null, null],
+    [null, null, null, null, null, null, null, null],
+    [null, null, null, null, null, null, null, null],
+    [null, null, null, null, null, null, null, null],
+    ['wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP', 'wP'],
+    ['wR', 'wN', 'wB', 'wQ', 'wK', 'wB', 'wN', 'wR'],
+  ];
+
+  let boardState = JSON.parse(JSON.stringify(initialBoard)); // deep copy
+
+  // Current selected square (row,col)
+  let selectedSquare = null;
+
+  // Whose turn? 'w' or 'b'
+  let turn = 'w';
+
+  // Game status
+  let gameOver = false;
+
+  // Players info (set after login)
+  let currentUser = null;
+  let playerColor = null; // 'w' or 'b'
+
+  // Firebase game room info
+  let gameRoomId = null;
+
+  // DOM references
+  const boardContainer = document.getElementById('board-container');
+  const capturedWhiteDiv = document.getElementById('captured-white');
+  const capturedBlackDiv = document.getElementById('captured-black');
+  const blackClock = document.getElementById('black-clock');
+  const whiteClock = document.getElementById('white-clock');
+  const winnerModal = document.getElementById('winner-modal');
+  const winnerText = document.getElementById('winner-text');
+  const modalRestartBtn = document.getElementById('modal-restart-btn');
+
+  // Captured pieces arrays
+  let capturedWhite = [];
+  let capturedBlack = [];
+
+  // ====== RENDER BOARD FUNCTION ======
+  function renderBoard() {
+    boardContainer.innerHTML = '';
+    for (let row = 0; row < 8; row++) {
+      for (let col = 0; col < 8; col++) {
+        const square = document.createElement('div');
+        square.classList.add('square');
+        // Determine square color (light or dark)
+        if ((row + col) % 2 === 0) {
+          square.classList.add('light');
+        } else {
+          square.classList.add('dark');
+        }
+        square.dataset.row = row;
+        square.dataset.col = col;
+
+        // Add piece image if exists
+        const piece = boardState[row][col];
+        if (piece) {
+          const img = document.createElement('img');
+          img.src = pieceImages[piece];
+          img.classList.add('piece');
+          img.draggable = false;
+          square.appendChild(img);
         }
 
-        // Handle move from player
-        function onDrop(source, target) {
-            const move = chess.move({
-                from: source,
-                to: target,
-                promotion: 'q' // Always promote to a queen for simplicity
-            });
-
-            if (move === null) return 'snapback'; // Invalid move
-
-            // Update move in Firebase
-            database.ref(`games/${gameId}/moves`).push({
-                from: source,
-                to: target,
-                fen: chess.fen()
-            });
+        // Highlight selected square
+        if (selectedSquare && selectedSquare[0] === row && selectedSquare[1] === col) {
+          square.classList.add('selected');
         }
 
-        // Monitor moves from Firebase
-        function monitorMoves() {
-            database.ref(`games/${gameId}/moves`).on("child_added", (snapshot) => {
-                const move = snapshot.val();
+        // Add click event listener for move handling
+        square.addEventListener('click', () => {
+          if (gameOver) return;
+          if (!currentUser) return alert('Please login first to play.');
+          if (playerColor !== turn) return alert('Wait for your turn.');
+          onSquareClick(row, col);
+        });
 
-                // Only update the board if it's the opponent's turn
-                if (chess.turn() !== (isPlayerWhite ? 'w' : 'b')) {
-                    chess.move({ from: move.from, to: move.to });
-                    updateBoard();
+        boardContainer.appendChild(square);
+      }
+    }
+  }
+
+  // ====== CLICK HANDLER ======
+  function onSquareClick(row, col) {
+    const clickedPiece = boardState[row][col];
+    if (selectedSquare) {
+      // Try to move if move valid
+      const [selRow, selCol] = selectedSquare;
+      if (selRow === row && selCol === col) {
+        // Deselect if same square clicked
+        selectedSquare = null;
+        renderBoard();
+        return;
+      }
+      // Validate move here (rudimentary, later improve)
+      if (isValidMove(selRow, selCol, row, col)) {
+        makeMove(selRow, selCol, row, col);
+        selectedSquare = null;
+      } else {
+        alert('Invalid move');
+        selectedSquare = null;
+      }
+      renderBoard();
+    } else {
+      // Select only if piece belongs to current player
+      if (clickedPiece && clickedPiece[0] === playerColor) {
+        selectedSquare = [row, col];
+        renderBoard();
+      }
+    }
+  }
+
+  // ====== MOVE VALIDATION (rudimentary placeholder) ======
+  // TODO: Full chess rules implement later
+  function isValidMove(fromRow, fromCol, toRow, toCol) {
+    const piece = boardState[fromRow][fromCol];
+    if (!piece) return false;
+    if (piece[0] !== turn) return false;
+
+    // Prevent moving to same square
+    if (fromRow === toRow && fromCol === toCol) return false;
+
+    const target = boardState[toRow][toCol];
+    if (target && target[0] === turn) return false; // can't capture own piece
+
+    // For now allow any move except above restrictions
+    return true;
+  }
+
+  // ====== MAKE MOVE ======
+  function makeMove(fromRow, fromCol, toRow, toCol) {
+    // Capture if enemy piece present
+    const target = boardState[toRow][toCol];
+    if (target) {
+      if (target[0] === 'w') {
+        capturedWhite.push(target);
+        renderCapturedPieces();
+      } else {
+        capturedBlack.push(target);
+        renderCapturedPieces();
+      }
+    }
+
+    // Move piece
+    boardState[toRow][toCol] = boardState[fromRow][fromCol];
+    boardState[fromRow][fromCol] = null;
+
+    // Change turn
+    turn = turn === 'w' ? 'b' : 'w';
+
+    // Update game state on Firebase
+    updateGameState();
+
+    // Update clocks (TODO: implement clock logic)
+    updateClocks();
+
+    // Check game end condition (TODO: implement checkmate/stalemate)
+  }
+
+  // ====== RENDER CAPTURED PIECES ======
+  function renderCapturedPieces() {
+    capturedWhiteDiv.innerHTML = '';
+    capturedBlackDiv.innerHTML = '';
+
+    capturedWhite.forEach(piece => {
+      const img = document.createElement('img');
+      img.src = pieceImages[piece];
+      capturedWhiteDiv.appendChild(img);
+    });
+
+    capturedBlack.forEach(piece => {
+      const img = document.createElement('img');
+      img.src = pieceImages[piece];
+      capturedBlackDiv.appendChild(img);
+    });
+  }
+
+  // ====== UPDATE GAME STATE ON FIREBASE ======
+  function updateGameState() {
+    if (!gameRoomId) return;
+    const gameRef = database.ref('games/' + gameRoomId);
+    const state = {
+      board: boardState,
+      turn,
+      capturedWhite,
+      capturedBlack,
+      gameOver
+    };
+    gameRef.set(state).catch(console.error);
+  }
+
+  // ====== LOAD GAME STATE FROM FIREBASE ======
+  function loadGameStateFromFirebase() {
+    if (!gameRoomId) return;
+    const gameRef = database.ref('games/' + gameRoomId);
+    gameRef.on('value', snapshot => {
+      const state = snapshot.val();
+      if (!state) return;
+      boardState = state.board || JSON.parse(JSON.stringify(initialBoard));
+      turn = state.turn || 'w';
+      capturedWhite = state.capturedWhite || [];
+      capturedBlack = state.capturedBlack || [];
+      gameOver = state.gameOver || false;
+
+      renderBoard();
+      renderCapturedPieces();
+      updateClocks();
+      if (gameOver) showWinnerModal(state.winner);
+    });
+  }
+
+  // ====== ON USER LOGIN ======
+  function onUserLoggedIn(user) {
+    currentUser = user;
+    // TODO: Find or create game room, assign color, load game state
+    setupGameRoom();
+  }
+
+  // ====== ON USER LOGOUT ======
+  function onUserLoggedOut() {
+    currentUser = null;
+    playerColor = null;
+    gameRoomId = null;
+    boardState = JSON.parse(JSON.stringify(initialBoard));
+    turn = 'w';
+    gameOver = false;
+    selectedSquare = null;
+    capturedWhite = [];
+    capturedBlack = [];
+    renderBoard();
+    renderCapturedPieces();
+    updateClocks();
+  }
+
+  // ====== SETUP GAME ROOM LOGIC ======
+  // For demo: Simple matchmaking: check if there's an open game, else create new
+  function setupGameRoom() {
+    const gamesRef = database.ref('games');
+    gamesRef.once('value').then(snapshot => {
+      const games = snapshot.val() || {};
+      // Find game waiting for opponent
+      let waitingGameId = null;
+      for (const id in games) {
+        const game = games[id];
+        if (game.playerWhite === currentUser.uid && !game.playerBlack) {
+          waitingGameId = id;
+          playerColor = 'w';
+          break;
+        }
+        if (!game.playerWhite) {
+          waitingGameId = id;
+          break;
+        }
+      }
+      if (waitingGameId) {
+        gameRoomId = waitingGameId;
+        joinGameRoom(gameRoomId);
+      } else {
+        // Create new game room
+        createGameRoom();
+      }
+    });
+  }
+
+  // ====== CREATE NEW GAME ROOM ======
+  function createGameRoom() {
+    const newGameRef = database.ref('games').push();
+    gameRoomId = newGameRef.key;
+    playerColor = 'w';
+    const gameData = {
+      playerWhite: currentUser.uid,
+      playerBlack: null,
+      board: JSON.parse(JSON.stringify(initialBoard)),
+      turn: 'w',
+      capturedWhite: [],
+      capturedBlack: [],
+      gameOver: false,
+      winner: null
+    };
+    newGameRef.set(gameData).then(() => {
+      loadGameStateFromFirebase();
+    }).catch(console.error);
+  }
+
+  // ====== JOIN EXISTING GAME ROOM ======
+  function joinGameRoom(id) {
+    const gameRef = database.ref('games/' + id);
+    gameRef.once('value').then(snapshot => {
+      const game = snapshot.val();
+      if (!game) {
+        alert('Game not found.');
+        return;
+      }
+      if (!game.playerBlack && game.playerWhite !== currentUser.uid) {
+        // Join as Black
+        gameRef.update({ playerBlack: currentUser.uid }).then(() => {
+          playerColor = 'b';
+          loadGameStateFromFirebase();
+        });
+      } else if (game.playerWhite === currentUser.uid) {
+        // Rejoin as White
+        playerColor = 'w';
+        loadGameStateFromFirebase();
+      } else if (game.playerBlack === currentUser.uid) {
+        // Rejoin as Black
+        playerColor = 'b';
+        loadGameStateFromFirebase();
+      } else {
+        alert('Game is full.');
+      }
+    });
+  }
+
+  // ====== UPDATE CLOCKS (Simple countdown placeholder) ======
+  let blackTime = 10 * 60; // 10 minutes in seconds
+  let whiteTime = 10 * 60;
+  let clockInterval = null;
+
+  function updateClocks() {
+    if (clockInterval) clearInterval(clockInterval);
+
+    function formatTime(seconds) {
+      const m = Math.floor(seconds / 60);
+      const s = seconds % 60;
+      return `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+    }
+
+    function tick() {
+      if (gameOver) {
+        clearInterval(clockInterval);
+        return;
+      }
+      if (turn === 'w') {
+        whiteTime--;
+        if (whiteTime <= 0) {
+          endGame('Black wins by timeout');
+          return;
+        }
+      } else {
+        blackTime--;
+        if (blackTime <= 0) {
+          endGame('White wins by timeout');
+          return;
+        }
+      }
+      blackClock.textContent = formatTime(blackTime);
+      whiteClock.textContent = formatTime(whiteTime);
+    }
+    blackClock.classList.toggle('active-clock', turn === 'b');
+    blackClock.classList.toggle('inactive-clock', turn !== 'b');
+    whiteClock.classList.toggle('active-clock', turn === 'w');
+    whiteClock.classList.toggle('inactive-clock', turn !== 'w');
+
+    clockInterval = setInterval(tick, 1000);
+  }
+
+  // ====== SHOW WINNER MODAL ======
+  function showWinnerModal(winnerTextStr) {
+    winnerText.textContent = `Winner: ${winnerTextStr || 'Unknown'}`;
+    winnerModal.style.display = 'flex';
+    gameOver = true;
+    if (clockInterval) clearInterval(clockInterval);
+  }
+
+  modalRestartBtn.addEventListener('click', () => {
+    // Reset game state
+    boardState = JSON.parse(JSON.stringify(initialBoard));
+    turn = 'w';
+    gameOver = false;
+    capturedWhite = [];
+    capturedBlack = [];
+    selectedSquare = null;
+    updateGameState();
+    renderBoard();
+    renderCapturedPieces();
+    updateClocks();
+    winnerModal.style.display = 'none';
+  });
+
+  // Initial render
+  renderBoard();
+  renderCapturedPieces();
+  updateClocks();
+
+
+  // ====== CHECK IF KING IS IN CHECK ======
+  function isKingInCheck(board, color) {
+    const enemyColor = color === 'w' ? 'b' : 'w';
+    let kingPos = null;
+
+    // Find king position
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        if (board[r][c] === color + 'K') {
+          kingPos = [r, c];
+          break;
+        }
+      }
+      if (kingPos) break;
+    }
+
+    if (!kingPos) return true; // King missing means check (or game lost)
+
+    // Check if any enemy piece attacks the king
+    // Simplified: just check if any enemy piece can move to king's position
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        if (board[r][c] && board[r][c][0] === enemyColor) {
+          if (isValidMoveForCheck(board, r, c, kingPos[0], kingPos[1])) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  // ====== MOVE VALIDATION FOR CHECK PURPOSE (Simplified) ======
+  // For isKingInCheck: Only basic validation to detect attacks
+  function isValidMoveForCheck(board, fromRow, fromCol, toRow, toCol) {
+    const piece = board[fromRow][fromCol];
+    if (!piece) return false;
+    const type = piece[1];
+
+    const dRow = toRow - fromRow;
+    const dCol = toCol - fromCol;
+
+    // Basic movement rules by piece type (no castling, no en passant)
+    switch(type) {
+      case 'P':
+        // Pawn attacks diagonally forward
+        if (piece[0] === 'w') {
+          return dRow === -1 && Math.abs(dCol) === 1;
+        } else {
+          return dRow === 1 && Math.abs(dCol) === 1;
+        }
+      case 'N':
+        return (Math.abs(dRow) === 2 && Math.abs(dCol) === 1) || (Math.abs(dRow) === 1 && Math.abs(dCol) === 2);
+      case 'B':
+        if (Math.abs(dRow) === Math.abs(dCol)) {
+          return isPathClear(board, fromRow, fromCol, toRow, toCol);
+        }
+        return false;
+      case 'R':
+        if (dRow === 0 || dCol === 0) {
+          return isPathClear(board, fromRow, fromCol, toRow, toCol);
+        }
+        return false;
+      case 'Q':
+        if (dRow === 0 || dCol === 0 || Math.abs(dRow) === Math.abs(dCol)) {
+          return isPathClear(board, fromRow, fromCol, toRow, toCol);
+        }
+        return false;
+      case 'K':
+        return Math.abs(dRow) <= 1 && Math.abs(dCol) <= 1;
+      default:
+        return false;
+    }
+  }
+
+  // ====== CHECK IF PATH IS CLEAR (for sliding pieces) ======
+  function isPathClear(board, fromRow, fromCol, toRow, toCol) {
+    const stepRow = Math.sign(toRow - fromRow);
+    const stepCol = Math.sign(toCol - fromCol);
+    let r = fromRow + stepRow;
+    let c = fromCol + stepCol;
+    while (r !== toRow || c !== toCol) {
+      if (board[r][c] !== null) return false;
+      r += stepRow;
+      c += stepCol;
+    }
+    return true;
+  }
+
+  // ====== EXTEND isValidMove TO INCLUDE CHECK PREVENTION ======
+  function isValidMove(fromRow, fromCol, toRow, toCol) {
+    const piece = boardState[fromRow][fromCol];
+    if (!piece) return false;
+    if (piece[0] !== turn) return false;
+
+    // Basic invalid moves
+    if (fromRow === toRow && fromCol === toCol) return false;
+    const target = boardState[toRow][toCol];
+    if (target && target[0] === turn) return false;
+
+    // Here implement piece-specific move validation (for now simplified)
+    if (!isValidMoveForCheck(boardState, fromRow, fromCol, toRow, toCol)) {
+      return false;
+    }
+
+    // Check if move leaves own king in check (simulate the move)
+    const tempBoard = JSON.parse(JSON.stringify(boardState));
+    tempBoard[toRow][toCol] = tempBoard[fromRow][fromCol];
+    tempBoard[fromRow][fromCol] = null;
+
+    if (isKingInCheck(tempBoard, turn)) {
+      return false; // Can't move into check
+    }
+
+    return true;
+  }
+
+  // ====== END GAME CHECK ======
+  function checkGameEnd() {
+    // Check if opponent's king is in checkmate or stalemate
+    const opponent = turn === 'w' ? 'b' : 'w';
+
+    // Check if opponent's king is in check
+    const inCheck = isKingInCheck(boardState, opponent);
+
+    // Check if opponent has any valid moves
+    const hasMoves = hasAnyValidMove(opponent);
+
+    if (inCheck && !hasMoves) {
+      endGame(`${turn === 'w' ? 'White' : 'Black'} wins by checkmate`);
+      return true;
+    }
+    if (!inCheck && !hasMoves) {
+      endGame('Draw by stalemate');
+      return true;
+    }
+    return false;
+  }
+
+  // ====== CHECK IF PLAYER HAS ANY VALID MOVES ======
+  function hasAnyValidMove(color) {
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        if (boardState[r][c] && boardState[r][c][0] === color) {
+          for (let rr = 0; rr < 8; rr++) {
+            for (let cc = 0; cc < 8; cc++) {
+              if (isValidMoveForCheck(boardState, r, c, rr, cc)) {
+                // Simulate move
+                const tempBoard = JSON.parse(JSON.stringify(boardState));
+                tempBoard[rr][cc] = tempBoard[r][c];
+                tempBoard[r][c] = null;
+                if (!isKingInCheck(tempBoard, color)) {
+                  return true;
                 }
-            });
-        }
-
-        // Start a new game
-        function startGame() {
-            const gameRef = database.ref("games").push();
-            gameId = gameRef.key;
-            isPlayerWhite = true;
-            statusElement.textContent = "Game started! You are white.";
-            monitorMoves();
-        }
-
-        // Join an existing game
-        function joinGame(gameIdToJoin) {
-            gameId = gameIdToJoin;
-            isPlayerWhite = false;
-            statusElement.textContent = "Game joined! You are black.";
-            monitorMoves();
-        }
-
-        // Check for available games
-        function checkForGames() {
-            database.ref("games").once("value", (snapshot) => {
-                const games = snapshot.val();
-                const availableGame = games && Object.keys(games).find((key) => !games[key].started);
-
-                if (availableGame) {
-                    joinGame(availableGame);
-                    database.ref(`games/${availableGame}`).update({ started: true });
-                } else {
-                    startGame();
-                }
-            });
-        }
-
-        // Authentication state listener
-        auth.onAuthStateChanged((user) => {
-            if (user) {
-                logoutBtn.style.display = "block";
-                statusElement.textContent = "Looking for a game...";
-                checkForGames();
-            } else {
-                logoutBtn.style.display = "none";
-                statusElement.textContent = "Please sign in.";
-                auth.signInAnonymously();
+              }
             }
-        });
+          }
+        }
+      }
+    }
+    return false;
+  }
 
-        // Logout button
-        logoutBtn.addEventListener("click", () => {
-            auth.signOut();
-        });
+  // ====== EXTEND makeMove TO CHECK GAME END ======
+  function makeMove(fromRow, fromCol, toRow, toCol) {
+    const target = boardState[toRow][toCol];
+    if (target) {
+      if (target[0] === 'w') {
+        capturedWhite.push(target);
+      } else {
+        capturedBlack.push(target);
+      }
+      renderCapturedPieces();
+    }
+    boardState[toRow][toCol] = boardState[fromRow][fromCol];
+    boardState[fromRow][fromCol] = null;
 
-        // Initialize chess board
-        board = Chessboard('board', {
-            draggable: true,
-            dropOffBoard: 'snapback',
-            position: 'start',
-            onDrop: onDrop
+    // Check for pawn promotion (basic: auto queen)
+    const piece = boardState[toRow][toCol];
+    if (piece[1] === 'P' && (toRow === 0 || toRow === 7)) {
+      boardState[toRow][toCol] = piece[0] + 'Q';
+    }
+
+    // Switch turn
+    turn = turn === 'w' ? 'b' : 'w';
+
+    updateGameState();
+    updateClocks();
+    renderBoard();
+
+    if (!checkGameEnd()) {
+      // Continue game
+    }
+  }
+
+
+  // ====== END GAME FUNCTION ======
+  function endGame(message) {
+    gameOver = true;
+    if (clockInterval) {
+      clearInterval(clockInterval);
+      clockInterval = null;
+    }
+    showWinnerModal(message);
+  }
+
+  // ====== SHOW WINNER MODAL ======
+  function showWinnerModal(winnerTextStr) {
+    winnerText.textContent = `Game Over: ${winnerTextStr || 'Unknown result'}`;
+    winnerModal.style.display = 'flex';
+  }
+
+  // ====== HIDE WINNER MODAL FUNCTION ======
+  function hideWinnerModal() {
+    winnerModal.style.display = 'none';
+  }
+
+  // ====== RESET GAME FUNCTION ======
+  function resetGame() {
+    boardState = JSON.parse(JSON.stringify(initialBoard));
+    turn = 'w';
+    gameOver = false;
+    capturedWhite = [];
+    capturedBlack = [];
+    selectedSquare = null;
+    whiteTime = 10 * 60;
+    blackTime = 10 * 60;
+    updateGameState();
+    renderBoard();
+    renderCapturedPieces();
+    updateClocks();
+    hideWinnerModal();
+  }
+
+  // ====== MODAL RESTART BUTTON EVENT ======
+  modalRestartBtn.addEventListener('click', () => {
+    resetGame();
+  });
+
+  // ====== INITIAL RENDER ======
+  renderBoard();
+  renderCapturedPieces();
+  updateClocks();
+
+
+  // ====== LEAVE GAME ROOM ======
+  function leaveGameRoom() {
+    if (!gameRoomId) return;
+    const gameRef = database.ref('games/' + gameRoomId);
+
+    gameRef.once('value').then(snapshot => {
+      const game = snapshot.val();
+      if (!game) return;
+
+      // যদি ইউজার হোয়াইট হয়, সেটি খালি করে দেয়
+      if (game.playerWhite === currentUser.uid) {
+        gameRef.update({ playerWhite: null });
+      }
+      // যদি ব্ল্যাক হয়, সেটি খালি করে দেয়
+      if (game.playerBlack === currentUser.uid) {
+        gameRef.update({ playerBlack: null });
+      }
+
+      // যদি দুজনই না থাকে, গেম ডিলিট করে দিতে পারো (optional)
+      gameRef.once('value').then(snap => {
+        const updatedGame = snap.val();
+        if (!updatedGame.playerWhite && !updatedGame.playerBlack) {
+          gameRef.remove();
+        }
+      });
+
+      gameRoomId = null;
+      playerColor = null;
+      currentUser = null;
+    }).catch(console.error);
+  }
+
+  // ====== HANDLE LOGOUT CLEANUP ======
+  logoutBtn.addEventListener('click', () => {
+    leaveGameRoom();
+    auth.signOut().catch(console.error);
+  });
+
+  // ====== OPTIONAL: DEBUG FUNCTION TO LOG CURRENT STATE ======
+  function logGameState() {
+    console.log('Game Room:', gameRoomId);
+    console.log('Player Color:', playerColor);
+    console.log('Turn:', turn);
+    console.log('Board State:', boardState);
+    console.log('Captured White:', capturedWhite);
+    console.log('Captured Black:', capturedBlack);
+    console.log('Game Over:', gameOver);
+  }
+
+  // ====== DEBUG BUTTON (Optional) ======
+  // You can create a button in your HTML and connect this function for easier debugging
+
+
+
+  // ====== FIREBASE REALTIME UPDATES LISTENER ======
+  function startListeningToGame() {
+    if (!gameRoomId) return;
+    const gameRef = database.ref('games/' + gameRoomId);
+
+    gameRef.on('value', snapshot => {
+      const state = snapshot.val();
+      if (!state) return;
+
+      // Update local variables from Firebase state
+      boardState = state.board || JSON.parse(JSON.stringify(initialBoard));
+      turn = state.turn || 'w';
+      capturedWhite = state.capturedWhite || [];
+      capturedBlack = state.capturedBlack || [];
+      gameOver = state.gameOver || false;
+
+      renderBoard();
+      renderCapturedPieces();
+      updateClocks();
+
+      if (gameOver) {
+        showWinnerModal(state.winner || 'Game ended');
+      }
+    });
+  }
+
+  // ====== STOP LISTENING TO GAME UPDATES ======
+  function stopListeningToGame() {
+    if (!gameRoomId) return;
+    const gameRef = database.ref('games/' + gameRoomId);
+    gameRef.off();
+  }
+
+  // ====== OVERRIDE setupGameRoom TO START LISTENING AFTER JOIN ======
+  function setupGameRoom() {
+    const gamesRef = database.ref('games');
+    gamesRef.once('value').then(snapshot => {
+      const games = snapshot.val() || {};
+      let waitingGameId = null;
+      for (const id in games) {
+        const game = games[id];
+        if (game.playerWhite === currentUser.uid && !game.playerBlack) {
+          waitingGameId = id;
+          playerColor = 'w';
+          break;
+        }
+        if (!game.playerWhite) {
+          waitingGameId = id;
+          break;
+        }
+      }
+      if (waitingGameId) {
+        gameRoomId = waitingGameId;
+        joinGameRoom(gameRoomId);
+      } else {
+        createGameRoom();
+      }
+    });
+  }
+
+  // ====== OVERRIDE joinGameRoom TO START LISTENING ======
+  function joinGameRoom(id) {
+    const gameRef = database.ref('games/' + id);
+    gameRef.once('value').then(snapshot => {
+      const game = snapshot.val();
+      if (!game) {
+        alert('Game not found.');
+        return;
+      }
+      if (!game.playerBlack && game.playerWhite !== currentUser.uid) {
+        gameRef.update({ playerBlack: currentUser.uid }).then(() => {
+          playerColor = 'b';
+          startListeningToGame();
         });
-    </script>
+      } else if (game.playerWhite === currentUser.uid) {
+        playerColor = 'w';
+        startListeningToGame();
+      } else if (game.playerBlack === currentUser.uid) {
+        playerColor = 'b';
+        startListeningToGame();
+      } else {
+        alert('Game is full.');
+      }
+    });
+  }
+
+  // ====== OVERRIDE createGameRoom TO START LISTENING ======
+  function createGameRoom() {
+    const newGameRef = database.ref('games').push();
+    gameRoomId = newGameRef.key;
+    playerColor = 'w';
+    const gameData = {
+      playerWhite: currentUser.uid,
+      playerBlack: null,
+      board: JSON.parse(JSON.stringify(initialBoard)),
+      turn: 'w',
+      capturedWhite: [],
+      capturedBlack: [],
+      gameOver: false,
+      winner: null
+    };
+    newGameRef.set(gameData).then(() => {
+      startListeningToGame();
+    }).catch(console.error);
+  }
+
+  // ====== CLEANUP ON LOGOUT ======
+  logoutBtn.addEventListener('click', () => {
+    stopListeningToGame();
+    leaveGameRoom();
+    auth.signOut().catch(console.error);
+  });
+
+
+
+  // ====== AUTHENTICATION STATE LISTENER ======
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      onUserLoggedIn(user);
+    } else {
+      onUserLoggedOut();
+    }
+  });
+
+  // ====== USER LOGIN FUNCTION ======
+  // For demo, simple anonymous login
+  function login() {
+    auth.signInAnonymously()
+      .then(() => {
+        console.log('Logged in anonymously');
+      })
+      .catch(error => {
+        console.error('Login error:', error);
+      });
+  }
+
+  // ====== USER LOGOUT FUNCTION ======
+  function logout() {
+    auth.signOut()
+      .then(() => {
+        console.log('Logged out');
+      })
+      .catch(error => {
+        console.error('Logout error:', error);
+      });
+  }
+
+  // ====== HANDLE USER LOGGED IN ======
+  function onUserLoggedIn(user) {
+    currentUser = user;
+    console.log('User logged in:', user.uid);
+    setupGameRoom();
+  }
+
+  // ====== HANDLE USER LOGGED OUT ======
+  function onUserLoggedOut() {
+    currentUser = null;
+    playerColor = null;
+    gameRoomId = null;
+    boardState = JSON.parse(JSON.stringify(initialBoard));
+    turn = 'w';
+    gameOver = false;
+    selectedSquare = null;
+    capturedWhite = [];
+    capturedBlack = [];
+    renderBoard();
+    renderCapturedPieces();
+    updateClocks();
+    hideWinnerModal();
+  }
+
+  // ====== LOGIN BUTTON EVENT ======
+  const loginBtn = document.getElementById('login-btn');
+  loginBtn.addEventListener('click', () => {
+    login();
+  });
+
+  // ====== LOGOUT BUTTON REFERENCE ======
+  const logoutBtn = document.getElementById('logout-btn');
+  logoutBtn.addEventListener('click', () => {
+    logout();
+  });
+
+
+
+  // ====== SHOW NOTIFICATION MESSAGE ======
+  function showNotification(message, duration = 3000) {
+    let notificationDiv = document.getElementById('notification');
+    if (!notificationDiv) {
+      notificationDiv = document.createElement('div');
+      notificationDiv.id = 'notification';
+      notificationDiv.style.position = 'fixed';
+      notificationDiv.style.bottom = '20px';
+      notificationDiv.style.left = '50%';
+      notificationDiv.style.transform = 'translateX(-50%)';
+      notificationDiv.style.backgroundColor = 'rgba(0,0,0,0.7)';
+      notificationDiv.style.color = 'white';
+      notificationDiv.style.padding = '10px 20px';
+      notificationDiv.style.borderRadius = '5px';
+      notificationDiv.style.fontSize = '16px';
+      notificationDiv.style.zIndex = '1000';
+      document.body.appendChild(notificationDiv);
+    }
+    notificationDiv.textContent = message;
+    notificationDiv.style.display = 'block';
+
+    setTimeout(() => {
+      notificationDiv.style.display = 'none';
+    }, duration);
+  }
+
+  // ====== EXAMPLE: SHOW NOTIFICATION ON TURN CHANGE ======
+  function updateTurnNotification() {
+    const player = turn === 'w' ? 'White' : 'Black';
+    showNotification(`${player}'s turn`);
+  }
+
+  // ====== MODIFY updateClocks TO CALL updateTurnNotification ======
+  const originalUpdateClocks = updateClocks;
+  updateClocks = function() {
+    originalUpdateClocks();
+    updateTurnNotification();
+  }
+
+  // ====== OPTIONAL: BUTTON TO LOG CURRENT GAME STATE FOR DEBUGGING ======
+  const debugBtn = document.getElementById('debug-btn');
+  if (debugBtn) {
+    debugBtn.addEventListener('click', () => {
+      console.log('Current Game State:');
+      console.log('Game Room ID:', gameRoomId);
+      console.log('Player Color:', playerColor);
+      console.log('Turn:', turn);
+      console.log('Board State:', boardState);
+      console.log('Captured White:', capturedWhite);
+      console.log('Captured Black:', capturedBlack);
+      console.log('Game Over:', gameOver);
+    });
+  }
+
+
+  // ====== MOVE HISTORY TRACKING ======
+  let moveHistory = [];
+
+  // Save a move to history (called inside makeMove)
+  function saveMoveToHistory(fromRow, fromCol, toRow, toCol, capturedPiece) {
+    moveHistory.push({
+      from: [fromRow, fromCol],
+      to: [toRow, toCol],
+      pieceMoved: boardState[toRow][toCol],
+      capturedPiece: capturedPiece || null,
+      turnBeforeMove: turn === 'w' ? 'b' : 'w'
+    });
+  }
+
+  // ====== UNDO LAST MOVE ======
+  function undoLastMove() {
+    if (moveHistory.length === 0 || gameOver) {
+      showNotification('No moves to undo or game over.');
+      return;
+    }
+    const lastMove = moveHistory.pop();
+
+    // Revert board state
+    boardState[lastMove.from[0]][lastMove.from[1]] = lastMove.pieceMoved;
+    boardState[lastMove.to[0]][lastMove.to[1]] = lastMove.capturedPiece;
+
+    // Revert captured pieces arrays if needed
+    if (lastMove.capturedPiece) {
+      if (lastMove.capturedPiece[0] === 'w') {
+        capturedWhite.pop();
+      } else {
+        capturedBlack.pop();
+      }
+    }
+
+    // Revert turn
+    turn = lastMove.turnBeforeMove;
+
+    renderBoard();
+    renderCapturedPieces();
+    updateClocks();
+    updateTurnNotification();
+
+    // Update Firebase game state
+    updateGameState();
+  }
+
+  // ====== HOOK UNDO INTO UI ======
+  const undoBtn = document.getElementById('undo-btn');
+  if (undoBtn) {
+    undoBtn.addEventListener('click', () => {
+      undoLastMove();
+    });
+  }
+
+  // ====== MODIFY makeMove TO SAVE MOVES ======
+  const originalMakeMove = makeMove;
+  makeMove = function(fromRow, fromCol, toRow, toCol) {
+    const capturedPiece = boardState[toRow][toCol];
+    originalMakeMove(fromRow, fromCol, toRow, toCol);
+    saveMoveToHistory(fromRow, fromCol, toRow, toCol, capturedPiece);
+  };
+
+
+
+  // ====== CLEAR MOVE HISTORY WHEN NEW GAME STARTS ======
+  function clearMoveHistory() {
+    moveHistory = [];
+  }
+
+  // Update resetGame ফাংশনে moveHistory ক্লিয়ার করা
+  const originalResetGame = resetGame;
+  resetGame = function() {
+    clearMoveHistory();
+    originalResetGame();
+  };
+
+  // ====== SHOW MOVE HISTORY ON UI ======
+  const moveListDiv = document.getElementById('move-list');
+
+  function renderMoveList() {
+    if (!moveListDiv) return;
+
+    moveListDiv.innerHTML = '';
+    moveHistory.forEach((move, index) => {
+      const moveText = document.createElement('div');
+      moveText.textContent = `${index + 1}. ${formatMove(move)}`;
+      moveListDiv.appendChild(moveText);
+    });
+  }
+
+  // Helper to format move notation (simple)
+  function formatMove(move) {
+    const cols = ['a','b','c','d','e','f','g','h'];
+    const from = cols[move.from[1]] + (8 - move.from[0]);
+    const to = cols[move.to[1]] + (8 - move.to[0]);
+    let capture = move.capturedPiece ? 'x' : '-';
+    return `${from}${capture}${to}`;
+  }
+
+  // Call renderMoveList on every move & undo
+  const originalMakeMove2 = makeMove;
+  makeMove = function(fromRow, fromCol, toRow, toCol) {
+    originalMakeMove2(fromRow, fromCol, toRow, toCol);
+    renderMoveList();
+  };
+
+  const originalUndoLastMove = undoLastMove;
+  undoLastMove = function() {
+    originalUndoLastMove();
+    renderMoveList();
+  };
+
+  // ====== OPTIONAL: BUTTON TO CLEAR MOVE HISTORY ======
+  const clearHistoryBtn = document.getElementById('clear-history-btn');
+  if (clearHistoryBtn) {
+    clearHistoryBtn.addEventListener('click', () => {
+      clearMoveHistory();
+      renderMoveList();
+      showNotification('Move history cleared');
+    });
+  }
+
+  // ====== INITIALIZE MOVE LIST ======
+  renderMoveList();
+
+  // ====== SAVE MOVE HISTORY TO FIREBASE ======
+  function updateMoveHistoryInFirebase() {
+    if (!gameRoomId) return;
+    const gameRef = database.ref('games/' + gameRoomId);
+    gameRef.update({ moveHistory }).catch(console.error);
+  }
+
+  // ====== LOAD MOVE HISTORY FROM FIREBASE ======
+  function loadMoveHistoryFromFirebase() {
+    if (!gameRoomId) return;
+    const gameRef = database.ref('games/' + gameRoomId);
+    gameRef.child('moveHistory').on('value', snapshot => {
+      const moves = snapshot.val();
+      if (moves) {
+        moveHistory = moves;
+        renderMoveList();
+      }
+    });
+  }
+
+  // ====== MODIFY updateGameState TO INCLUDE moveHistory ======
+  const originalUpdateGameState = updateGameState;
+  updateGameState = function() {
+    if (!gameRoomId) return;
+    const state = {
+      board: boardState,
+      turn,
+      capturedWhite,
+      capturedBlack,
+      gameOver,
+      winner: gameOver ? (turn === 'w' ? 'Black' : 'White') + ' wins' : null,
+      moveHistory
+    };
+    const gameRef = database.ref('games/' + gameRoomId);
+    gameRef.set(state).catch(console.error);
+  };
+
+  // ====== CALL loadMoveHistoryFromFirebase AFTER STARTING LISTENING TO GAME ======
+  const originalStartListeningToGame = startListeningToGame;
+  startListeningToGame = function() {
+    originalStartListeningToGame();
+    loadMoveHistoryFromFirebase();
+  };
+
+  // ====== MODIFY makeMove TO UPDATE MOVE HISTORY IN FIREBASE ======
+  const originalMakeMove3 = makeMove;
+  makeMove = function(fromRow, fromCol, toRow, toCol) {
+    originalMakeMove3(fromRow, fromCol, toRow, toCol);
+    updateMoveHistoryInFirebase();
+  };
+
+  // ====== MODIFY undoLastMove TO UPDATE MOVE HISTORY IN FIREBASE ======
+  const originalUndoLastMove2 = undoLastMove;
+  undoLastMove = function() {
+    originalUndoLastMove2();
+    updateMoveHistoryInFirebase();
+  };
+  </script> 
 </body>
 </html>
+
+
