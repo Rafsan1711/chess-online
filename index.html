@@ -27,12 +27,24 @@
       user-select: none;
       border: 1px solid #333;
       box-sizing: border-box;
-      transition: background 0.2s;
+      transition: background 0.2s, outline 0.2s;
+      position: relative;
     }
     .chess-square.light { background: #f0d9b5; }
     .chess-square.dark { background: #b58863; }
-    .chess-square.selected { outline: 3px solid yellow; }
+    .chess-square.selected { outline: 3px solid yellow; z-index: 10;}
+    .chess-square.check { box-shadow: 0 0 12px 4px #f00 inset !important;}
     .chess-square.highlight { background: rgba(255,255,0,0.4); }
+    .chess-square.legal-move::after {
+      content: "⚪";
+      position: absolute;
+      left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 1.3rem;
+      pointer-events: none;
+      color: #fff;
+      filter: drop-shadow(0 0 2px #222);
+    }
     .piece { width: 90%; height: 90%; user-select: none; }
     #status { font-size: 1.3rem; font-weight: bold; margin: 1rem 0; text-align: center; padding: 0.7rem 1.4rem; border-radius: 8px; }
     .white-turn { background: #4a90e2; box-shadow: 0 0 12px #4a90e2;}
@@ -45,11 +57,21 @@
     #modal-content { background: #111; padding: 2rem; border-radius: 10px; max-width: 400px; width: 90%; color: white; text-align: center; }
     .loader { border: 5px solid #444; border-top: 5px solid #00ff00; border-radius: 50%; width: 50px; height: 50px; animation: spin 1.5s linear infinite; margin: 0 auto 1rem auto; }
     @keyframes spin { 0% {transform: rotate(0deg);} 100% {transform: rotate(360deg);} }
-    /* Responsive Board */
     @media (max-width: 600px) {
       .board-grid { max-width: 95vw; }
       .chess-square { font-size: 1.1rem !important; }
     }
+    .promotion-modal-bg {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 2000;
+    }
+    .promotion-modal-bg.active { display: flex; }
+    .promotion-modal {
+      background: #222; border-radius: 14px; padding: 2rem; text-align: center; color: #fff; box-shadow: 0 0 22px #000;
+    }
+    .promotion-piece { cursor: pointer; margin: 0 10px; font-size: 2.5rem; transition: transform 0.1s; }
+    .promotion-piece:hover { transform: scale(1.2);}
+    .pinned { outline: 2px dashed #00eaff !important; }
+    .forked { box-shadow: 0 0 8px #ffa700 !important;}
   </style>
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
@@ -91,6 +113,13 @@
     </div>
   </div>
 
+  <div id="promotion-modal" class="promotion-modal-bg">
+    <div class="promotion-modal">
+      <h3 class="mb-4 text-lg font-bold">Pawn Promotion:</h3>
+      <div id="promotion-options"></div>
+    </div>
+  </div>
+
   <script>
     // ==== FIREBASE CONFIGURATION ====
     const firebaseConfig = {
@@ -119,6 +148,8 @@
     const winnerMessage = document.getElementById('winner-message');
     const modal = document.getElementById('modal');
     const playersFoundEl = document.getElementById('players-found');
+    const promotionModal = document.getElementById('promotion-modal');
+    const promotionOptions = document.getElementById('promotion-options');
 
     // GLOBALS
     let currentUser = null;
@@ -130,6 +161,7 @@
     let finished = false;
     let playerIndex = null;
     let matchCleanupScheduled = false;
+    let promotionCallback = null;
 
     // ==== AUTH & USER ====
     auth.onAuthStateChanged(async user => {
@@ -169,9 +201,7 @@
       auth.signInWithPopup(provider);
     }
 
-    function showScreen(name) {
-      // Only home screen in chess
-    }
+    function showScreen(name) {}
 
     function setupInitialUI() {
       restartBtn.style.display = 'none';
@@ -181,9 +211,7 @@
       finished = false;
     }
 
-    function selectMode(n) {
-      // Chess only 2 player
-    }
+    function selectMode(n) {}
 
     function startMatch() {
       if (!currentUser) return alert('Please sign in first.');
@@ -334,7 +362,13 @@
         selected: null,
         highlights: [],
         status: "active",
-        winner: null
+        winner: null,
+        lastMove: null,
+        check: false,
+        checkmate: false,
+        pinned: [],
+        forked: [],
+        promotion: null
       };
     }
 
@@ -349,7 +383,15 @@
       for(let r=0; r<8; r++) {
         for(let c=0; c<8; c++) {
           const light = (r + c) % 2 === 0 ? 'light' : 'dark';
-          boardHTML += `<div class="chess-square ${light}" data-row="${r}" data-col="${c}"></div>`;
+          let extra = '';
+          if (chess.selected && chess.selected.row === r && chess.selected.col === c) extra += ' selected';
+          if (chess.highlights && chess.highlights.some(mv => mv.row === r && mv.col === c)) extra += ' highlight legal-move';
+          // Show check
+          if (chess.check && board[r][c] && board[r][c][1] === "K" && board[r][c][0] === (chess.turn === "white" ? "b" : "w")) extra += ' check';
+          // Show pinned/fork
+          if (chess.pinned && chess.pinned.some(p => p.row === r && p.col === c)) extra += ' pinned';
+          if (chess.forked && chess.forked.some(p => p.row === r && p.col === c)) extra += ' forked';
+          boardHTML += `<div class="chess-square ${light}${extra}" data-row="${r}" data-col="${c}"></div>`;
         }
       }
       boardHTML += '</div>';
@@ -367,26 +409,25 @@
           }
         }
       }
-      if (chess.selected) {
-        const selectedDiv = document.querySelector(`.chess-square[data-row="${chess.selected.row}"][data-col="${chess.selected.col}"]`);
-        if (selectedDiv) selectedDiv.classList.add("selected");
-      }
-      chess.highlights.forEach(move => {
-        const moveDiv = document.querySelector(`.chess-square[data-row="${move.row}"][data-col="${move.col}"]`);
-        if (moveDiv) moveDiv.classList.add("highlight");
-      });
       document.querySelectorAll('.chess-square').forEach(sq => {
         sq.onclick = () => handleSquareClick(+sq.dataset.row, +sq.dataset.col);
-        sq.style.cursor = isMyTurn ? 'pointer' : 'not-allowed';
+        if (isMyTurn && !finished) {
+          sq.style.cursor = 'pointer';
+        } else {
+          sq.style.cursor = 'not-allowed';
+        }
       });
+      // Promotion modal
+      if (chess.promotion && chess.promotion.active && isMyTurn) {
+        showPromotionModal(chess.promotion, (piece) => {
+          db.ref('matches/' + matchId + '/chess/promotion').set({ ...chess.promotion, chosen: piece });
+        });
+      } else {
+        hidePromotionModal();
+      }
     }
 
     function getPieceSVG(code) {
-      // Use piece SVG from your "pieces" folder, fallback to Unicode
-      const unicodes = {
-        wK: "♔", wQ: "♕", wR: "♖", wB: "♗", wN: "♘", wP: "♙",
-        bK: "♚", bQ: "♛", bR: "♜", bB: "♝", bN: "♞", bP: "♟"
-      };
       return `https://upload.wikimedia.org/wikipedia/commons/${{
         wK: "4/42/Chess_klt45.svg",
         wQ: "1/15/Chess_qlt45.svg",
@@ -403,41 +444,115 @@
       }[code]}`;
     }
 
+    // --- Chess Logic ---
     function handleSquareClick(row, col) {
       if (!isMyTurn || finished) return;
       db.ref('matches/' + matchId).transaction(match => {
-        if (!match || match.chess.status === "finished") return;
+        if (!match || match.chess.status !== "active") return;
         const chess = match.chess;
+        const side = chess.turn;
+        const mySide = playerIndex === 0 ? "white" : "black";
+        if (side !== mySide) return; // Only allow my move
+
+        // If promotion modal waiting, do nothing
+        if (chess.promotion && chess.promotion.active && !chess.promotion.chosen) return;
+
+        // Handle pawn promotion choice
+        if (chess.promotion && chess.promotion.active && chess.promotion.chosen) {
+          // Apply promotion
+          const { row: prow, col: pcol, color, chosen } = chess.promotion;
+          chess.board[prow][pcol] = color + chosen;
+          chess.promotion = null;
+          chess.turn = side === "white" ? "black" : "white";
+          match.turnIndex = (match.turnIndex + 1) % 2;
+          chess.selected = null;
+          chess.highlights = [];
+          // Check/checkmate after promotion
+          applyCheckStates(chess);
+          match.chess = chess;
+          return match;
+        }
+
+        // --- Select piece ---
+        const code = chess.board[row][col];
         if (!chess.selected) {
-          const code = chess.board[row][col];
-          if ((chess.turn === "white" && code && code.startsWith('w') && playerIndex === 0) ||
-              (chess.turn === "black" && code && code.startsWith('b') && playerIndex === 1)) {
+          if ((side === "white" && code && code.startsWith('w') && playerIndex === 0) ||
+              (side === "black" && code && code.startsWith('b') && playerIndex === 1)) {
             chess.selected = { row, col };
-            chess.highlights = getLegalMoves(chess.board, row, col, chess.turn);
+            chess.highlights = getLegalMovesFull(chess.board, row, col, side, chess, true);
           }
         } else {
-          const move = chess.highlights.find(mv => mv.row === row && mv.col === col);
-          if (move) {
-            // Apply move
+          // Try to move
+          const legal = chess.highlights.find(mv => mv.row === row && mv.col === col);
+          if (legal) {
+            // Move logic with full legality
             const from = chess.selected;
             const to = { row, col };
-            const origFrom = chess.board[from.row][from.col];
-            const origTo = chess.board[to.row][to.col];
+            let moving = chess.board[from.row][from.col];
+            let target = chess.board[to.row][to.col];
+
+            // Castling logic
+            if (moving[1] === "K" && Math.abs(to.col - from.col) === 2) {
+              // King moves 2 squares = castling
+              if (to.col === 6) { // King-side
+                chess.board[from.row][7] = ""; // Remove rook
+                chess.board[from.row][5] = moving[0] + "R";
+              } else if (to.col === 2) { // Queen-side
+                chess.board[from.row][0] = "";
+                chess.board[from.row][3] = moving[0] + "R";
+              }
+            }
+
+            // Pawn promotion
+            if (moving[1] === "P" &&
+                ((moving[0] === "w" && to.row === 0) || (moving[0] === "b" && to.row === 7))) {
+              // Set promotion modal
+              chess.board[from.row][from.col] = "";
+              chess.board[to.row][to.col] = "";
+              chess.promotion = {
+                active: true,
+                row: to.row,
+                col: to.col,
+                color: moving[0]
+              };
+              chess.selected = null;
+              chess.highlights = [];
+              match.chess = chess;
+              return match;
+            }
+
+            // En passant
+            if (moving[1] === "P" && target === "" && from.col !== to.col) {
+              // Capturing empty square = en passant
+              const epRow = from.row + (moving[0] === "w" ? -1 : 1);
+              chess.board[epRow][to.col] = "";
+            }
+
+            // Move piece
             chess.board[from.row][from.col] = "";
-            chess.board[to.row][to.col] = origFrom;
-            // Pawn promotion, castling, en passant skip for brevity
-            chess.turn = chess.turn === "white" ? "black" : "white";
+            chess.board[to.row][to.col] = moving;
+            chess.lastMove = {from, to, moving, target};
+
+            // Next turn
+            chess.turn = side === "white" ? "black" : "white";
+            match.turnIndex = (match.turnIndex + 1) % 2;
             chess.selected = null;
             chess.highlights = [];
-            match.turnIndex = (match.turnIndex + 1) % 2;
-            // Checkmate/stalemate detection not implemented here for brevity
+
+            // Check/checkmate/fork/pin
+            applyCheckStates(chess);
+
+            // Game end
+            if (chess.checkmate) {
+              chess.status = "finished";
+              chess.winner = side;
+            }
           } else {
-            // Reselect if it's your piece
-            const code = chess.board[row][col];
-            if ((chess.turn === "white" && code && code.startsWith('w') && playerIndex === 0) ||
-                (chess.turn === "black" && code && code.startsWith('b') && playerIndex === 1)) {
+            // If clicking own piece, reselect
+            if ((side === "white" && code && code.startsWith('w') && playerIndex === 0) ||
+                (side === "black" && code && code.startsWith('b') && playerIndex === 1)) {
               chess.selected = { row, col };
-              chess.highlights = getLegalMoves(chess.board, row, col, chess.turn);
+              chess.highlights = getLegalMovesFull(chess.board, row, col, side, chess, true);
             } else {
               chess.selected = null;
               chess.highlights = [];
@@ -449,66 +564,245 @@
       });
     }
 
-    function getLegalMoves(board, r, c, turn) {
-      // Minimal: Only normal moves, no special chess rules for brevity
+    // --- Chess engine functions ---
+    // Helper: insideBoard
+    function insideBoard(r,c) { return r>=0&&r<8&&c>=0&&c<8; }
+
+    // Helper: deepCopyBoard
+    function deepCopyBoard(board) { return board.map(row => row.slice()); }
+
+    // Main legal moves function (all rules)
+    function getLegalMovesFull(board, r, c, turn, chess, markSpecials=false) {
       const code = board[r][c];
       if (!code) return [];
       const side = code[0] === 'w' ? 'white' : 'black';
       if (side !== turn) return [];
       const moves = [];
+      let pinnedSquares = [];
+      let forkSquares = [];
+
+      // All candidate moves
+      let candidates = [];
       if (code[1] === "P") {
         const dir = side === "white" ? -1 : 1;
         const r2 = r + dir;
-        if (r2 >= 0 && r2 < 8 && !board[r2][c]) moves.push({ row: r2, col: c });
-        for (const dc of [-1, 1]) {
-          const c2 = c + dc;
-          if (c2 >= 0 && c2 < 8 && board[r2][c2] && board[r2][c2][0] !== code[0])
-            moves.push({ row: r2, col: c2 });
+        // Forward
+        if (insideBoard(r2, c) && !board[r2][c]) candidates.push({ row: r2, col: c });
+        // Double move
+        if ((side === "white" && r===6) || (side === "black" && r===1)) {
+          const r3 = r + 2*dir;
+          if (insideBoard(r3, c) && !board[r2][c] && !board[r3][c]) candidates.push({ row: r3, col: c });
+        }
+        // Captures
+        for (const dc of [-1,1]) {
+          const c2 = c+dc;
+          if (insideBoard(r2, c2) && board[r2][c2] && board[r2][c2][0] !== code[0])
+            candidates.push({ row: r2, col: c2 });
+          // En passant
+          if (insideBoard(r, c2) && chess.lastMove && chess.lastMove.moving[1]==="P" &&
+              Math.abs(chess.lastMove.from.row-chess.lastMove.to.row)===2 &&
+              chess.lastMove.to.row===r && chess.lastMove.to.col===c2 &&
+              board[r][c2] && board[r][c2][0]!==code[0]) {
+            candidates.push({ row: r2, col: c2, enPassant:true });
+          }
         }
       }
-      // Knight
       if (code[1] === "N") {
-        const deltas = [
-          [-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]
-        ];
-        deltas.forEach(([dr,dc]) => {
-          const r2 = r+dr, c2 = c+dc;
-          if (r2>=0 && r2<8 && c2>=0 && c2<8 && (!board[r2][c2] || board[r2][c2][0]!==code[0]))
-            moves.push({ row: r2, col: c2 });
+        [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(([dr,dc]) => {
+          const r2=r+dr,c2=c+dc;
+          if (insideBoard(r2,c2) && (!board[r2][c2] || board[r2][c2][0]!==code[0]))
+            candidates.push({ row: r2, col: c2 });
         });
       }
-      // Bishop
       if (code[1] === "B" || code[1] === "Q") {
         for (const [dr,dc] of [[-1,-1],[-1,1],[1,-1],[1,1]]) {
           for (let k=1;k<8;k++) {
             const r2=r+dr*k, c2=c+dc*k;
-            if (r2<0||r2>=8||c2<0||c2>=8) break;
-            if (!board[r2][c2]) moves.push({ row: r2, col: c2 });
-            else { if(board[r2][c2][0]!==code[0]) moves.push({ row: r2, col: c2 }); break; }
+            if (!insideBoard(r2,c2)) break;
+            if (!board[r2][c2]) candidates.push({ row: r2, col: c2 });
+            else { if(board[r2][c2][0]!==code[0]) candidates.push({ row: r2, col: c2 }); break; }
           }
         }
       }
-      // Rook
       if (code[1] === "R" || code[1] === "Q") {
         for (const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]) {
           for (let k=1;k<8;k++) {
             const r2=r+dr*k, c2=c+dc*k;
-            if (r2<0||r2>=8||c2<0||c2>=8) break;
-            if (!board[r2][c2]) moves.push({ row: r2, col: c2 });
-            else { if(board[r2][c2][0]!==code[0]) moves.push({ row: r2, col: c2 }); break; }
+            if (!insideBoard(r2,c2)) break;
+            if (!board[r2][c2]) candidates.push({ row: r2, col: c2 });
+            else { if(board[r2][c2][0]!==code[0]) candidates.push({ row: r2, col: c2 }); break; }
           }
         }
       }
-      // King
       if (code[1] === "K") {
         for (const dr of [-1,0,1]) for (const dc of [-1,0,1]) {
           if (dr===0&&dc===0) continue;
-          const r2=r+dr, c2=c+dc;
-          if (r2>=0&&r2<8&&c2>=0&&c2<8&&(!board[r2][c2]||board[r2][c2][0]!==code[0]))
-            moves.push({ row: r2, col: c2 });
+          const r2=r+dr,c2=c+dc;
+          if (insideBoard(r2,c2) && (!board[r2][c2]||board[r2][c2][0]!==code[0]))
+            candidates.push({ row: r2, col: c2 });
+        }
+        // Castling
+        if (canCastle(board, side, "king")) candidates.push({ row: r, col: 6, castle:true });
+        if (canCastle(board, side, "queen")) candidates.push({ row: r, col: 2, castle:true });
+      }
+
+      // Filter only legal ones (no self-check)
+      for (const mv of candidates) {
+        const simBoard = deepCopyBoard(board);
+        // Apply move to simBoard
+        simBoard[mv.row][mv.col] = code;
+        simBoard[r][c] = "";
+        if (code[1]==="K" && Math.abs(mv.col-c)>=2) {
+          // Simulate castling rook
+          if (mv.col===6) { simBoard[r][5]=code[0]+"R"; simBoard[r][7]=""; }
+          else if (mv.col===2) { simBoard[r][3]=code[0]+"R"; simBoard[r][0]=""; }
+        }
+        // En passant
+        if (mv.enPassant) {
+          simBoard[r][mv.col]="";
+        }
+        // Promotion not handled here, always legal
+        // Check if own king attacked
+        if (!isKingAttacked(simBoard, side)) moves.push(mv);
+      }
+
+      if (markSpecials) {
+        // Find pinned/forked (basic version)
+        if (code[1] !== "K") {
+          pinnedSquares = findPinned(board, side);
+          forkSquares = findFork(board, side, r, c);
         }
       }
+      if (markSpecials) {
+        chess.pinned = pinnedSquares;
+        chess.forked = forkSquares;
+      }
       return moves;
+    }
+
+    // --- Utility functions for chess rules ---
+    // King is attacked?
+    function isKingAttacked(board, side) {
+      let kingPos = null;
+      for(let r=0;r<8;r++) for(let c=0;c<8;c++) {
+        if (board[r][c]===((side==="white")?"wK":"bK")) kingPos={row:r,col:c};
+      }
+      if (!kingPos) return true;
+      const opp = side==="white"?"b":"w";
+      // Check all opponent moves to see if king attacked
+      for(let r=0;r<8;r++) for(let c=0;c<8;c++) {
+        const code = board[r][c];
+        if (code && code[0]===opp) {
+          const moves = getLegalMovesFull(board, r, c, opp==="w"?"white":"black", {}, false);
+          if (moves.some(mv => mv.row===kingPos.row && mv.col===kingPos.col)) return true;
+        }
+      }
+      return false;
+    }
+    // Checkmate
+    function isCheckmate(board, side) {
+      for(let r=0;r<8;r++) for(let c=0;c<8;c++) {
+        const code = board[r][c];
+        if (code && ((side==="white" && code[0]==="w")||(side==="black"&&code[0]==="b"))) {
+          const moves = getLegalMovesFull(board, r, c, side, {}, false);
+          if (moves.length>0) return false;
+        }
+      }
+      return true;
+    }
+    // Find pinned pieces (basic)
+    function findPinned(board, side) {
+      // For each piece, see if moving exposes king to attack
+      const result = [];
+      for(let r=0;r<8;r++) for(let c=0;c<8;c++) {
+        const code = board[r][c];
+        if (code && ((side==="white" && code[0]==="w")||(side==="black"&&code[0]==="b")) && code[1]!=="K") {
+          const moves = getLegalMovesFull(board, r, c, side, {}, false);
+          let pinned = true;
+          for(const mv of moves) {
+            const simBoard = deepCopyBoard(board);
+            simBoard[mv.row][mv.col]=code;
+            simBoard[r][c]="";
+            if (!isKingAttacked(simBoard, side)) { pinned=false; break; }
+          }
+          if (pinned) result.push({row:r,col:c});
+        }
+      }
+      return result;
+    }
+    // Find forks (basic: knight forks king and rook/queen)
+    function findFork(board, side, r, c) {
+      const code = board[r][c];
+      if (!code) return [];
+      if (code[1]!=="N") return [];
+      const opp = side==="white"?"b":"w";
+      const targets = [];
+      [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(([dr,dc]) => {
+        const r2=r+dr,c2=c+dc;
+        if (insideBoard(r2,c2) && board[r2][c2] && board[r2][c2][0]===opp) {
+          if (["K","Q","R"].includes(board[r2][c2][1])) targets.push({row:r2,col:c2});
+        }
+      });
+      return targets;
+    }
+    // Castling
+    function canCastle(board, color, side) {
+      // No check, no pieces between, both have not moved
+      const r = color==="white"?7:0;
+      const king = board[r][4];
+      if (!king||king[1]!=="K") return false;
+      // No pieces between king and rook, not in check
+      if (side==="king") {
+        if (board[r][7]!==(color[0]+"R")) return false;
+        for(let c=5;c<=6;c++) if (board[r][c]) return false;
+        // No check on passing squares
+        for(let c=4;c<=6;c++) {
+          const simBoard = deepCopyBoard(board);
+          simBoard[r][c]=color[0]+"K";
+          simBoard[r][4]="";
+          if (isKingAttacked(simBoard, color)) return false;
+        }
+        return true;
+      }
+      if (side==="queen") {
+        if (board[r][0]!==(color[0]+"R")) return false;
+        for(let c=1;c<=3;c++) if (board[r][c]) return false;
+        for(let c=2;c<=4;c++) {
+          const simBoard = deepCopyBoard(board);
+          simBoard[r][c]=color[0]+"K";
+          simBoard[r][4]="";
+          if (isKingAttacked(simBoard, color)) return false;
+        }
+        return true;
+      }
+      return false;
+    }
+    // Apply check/checkmate states to board
+    function applyCheckStates(chess) {
+      const opp = chess.turn;
+      const board = chess.board;
+      chess.check = isKingAttacked(board, opp);
+      chess.checkmate = chess.check && isCheckmate(board, opp);
+    }
+
+    // --- Promotion modal ---
+    function showPromotionModal(prom, cb) {
+      promotionCallback = cb;
+      promotionModal.classList.add("active");
+      promotionOptions.innerHTML = "";
+      const opts = ["Q","R","B","N"];
+      opts.forEach(piece=>{
+        const img = document.createElement("img");
+        img.className = "promotion-piece";
+        img.src = getPieceSVG(prom.color + piece);
+        img.onclick = ()=>{ promotionModal.classList.remove("active"); cb(piece); };
+        promotionOptions.appendChild(img);
+      });
+    }
+    function hidePromotionModal() {
+      promotionModal.classList.remove("active");
+      promotionOptions.innerHTML = "";
+      promotionCallback = null;
     }
 
     function restartGame() {
@@ -527,4 +821,4 @@
 
   </script>
 </body>
-      </html>
+    </html>
