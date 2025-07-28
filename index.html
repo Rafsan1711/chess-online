@@ -157,7 +157,6 @@
     #winner-modal .modal-content button:hover {
       background-color: #ddd;
     }
-    /* Home screen styles */
     #home-screen {
       position: fixed;
       top: 0; left: 0;
@@ -202,16 +201,43 @@
       text-align: center;
       width: 100%;
     }
+    #user-bar {
+      margin: 0.7rem 0;
+      font-size: 1rem;
+      color: #ffe04d;
+      text-align: center;
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    #user-bar span {
+      display: flex;
+      align-items: center;
+    }
+    #user-bar img {
+      width: 1.8em;
+      height: 1.8em;
+      border-radius: 50%;
+      margin-right: 0.5em;
+    }
   </style>
   <!-- Firebase scripts (no library, use CDN) -->
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
 </head>
 <body>
   <div id="home-screen">
     <h1>♟️ Online Chess ♟️</h1>
-    <button id="play-btn">Play</button>
+    <button id="google-signin-btn">Sign in with Google</button>
+    <div id="signedin-user" style="display:none; margin-top:1rem; font-size:1.1em;"></div>
+    <button id="play-btn" style="display:none;">Play</button>
     <div id="waiting-message" style="display:none;">Waiting for another player...</div>
+  </div>
+  <div id="user-bar" style="display:none;">
+    <span id="user-white"></span>
+    <span id="user-black"></span>
   </div>
   <div id="info-bar" style="display:none;"></div>
   <div id="captured-white" class="captured" style="display:none;"></div>
@@ -242,10 +268,13 @@
     };
     firebase.initializeApp(firebaseConfig);
     var db = firebase.database();
+    var auth = firebase.auth();
 
     // ==== DOM refs ====
     const homeScreen = document.getElementById("home-screen");
+    const googleSignInBtn = document.getElementById("google-signin-btn");
     const playBtn = document.getElementById("play-btn");
+    const signedInUserDiv = document.getElementById("signedin-user");
     const waitingMsg = document.getElementById("waiting-message");
     const infoBar = document.getElementById("info-bar");
     const boardContainer = document.getElementById("board-container");
@@ -257,6 +286,10 @@
     const whiteClockDiv = document.getElementById("white-clock");
     const blackClockDiv = document.getElementById("black-clock");
     const clockContainers = document.querySelectorAll('.clock-container');
+    const userBar = document.getElementById("user-bar");
+    const userWhite = document.getElementById("user-white");
+    const userBlack = document.getElementById("user-black");
+
     // ========== GAME STATE VARS ==========
     let boardState = [];
     let selectedSquare = null;
@@ -272,10 +305,11 @@
     let mySide = null; // "white" or "black"
     let gameId = null;
     let isMyTurn = false;
-    let connected = false;
     let winner = null;
     let gameRef = null;
-    let lastMoveSound = null;
+    let user = null;
+    let playerInfo = {white: null, black: null};
+    let myUserDbKey = null;
 
     // Piece images mapping (relative to root!)
     const pieceImages = {
@@ -292,6 +326,34 @@
       bQ: "pieces/bQ.svg",
       bK: "pieces/bK.svg",
     };
+
+    // ============= GOOGLE SIGN IN ===========
+    function updateUIForUser(user) {
+      if (user) {
+        signedInUserDiv.style.display = "";
+        signedInUserDiv.innerHTML = `<img src="${user.photoURL}" style="width:2em;height:2em;border-radius:1em;margin-right:0.5em;vertical-align:middle;">${user.displayName}`;
+        playBtn.style.display = "";
+        googleSignInBtn.style.display = "none";
+      } else {
+        signedInUserDiv.style.display = "none";
+        playBtn.style.display = "none";
+        googleSignInBtn.style.display = "";
+      }
+    }
+    googleSignInBtn.onclick = function() {
+      var provider = new firebase.auth.GoogleAuthProvider();
+      auth.signInWithPopup(provider).then((result) => {
+        user = result.user;
+        updateUIForUser(user);
+      }).catch((error) => {
+        alert("Failed to sign in: " + error.message);
+      });
+    };
+    auth.onAuthStateChanged(function(u) {
+      user = u;
+      updateUIForUser(user);
+    });
+
     // ========== HOME SCREEN & MATCHMAKING ==========
     playBtn.onclick = function() {
       playBtn.disabled = true;
@@ -302,7 +364,7 @@
         let foundKey = null;
         snap.forEach(child => {
           let val = child.val();
-          if (val.status === "waiting") {
+          if (val.status === "waiting" && val.playerWhite && val.playerWhite.uid !== user.uid) {
             found = true;
             foundKey = child.key;
           }
@@ -318,12 +380,15 @@
     };
 
     function createGame() {
-      // Random id
       let id = "game_" + Math.random().toString(36).substr(2,9);
       gameId = id;
       mySide = "white";
       isMyTurn = true;
-      // Setup initial state
+      playerInfo.white = {
+        name: user.displayName,
+        photo: user.photoURL,
+        uid: user.uid
+      };
       let initialState = {
         board: [
           ["bR","bN","bB","bQ","bK","bB","bN","bR"],
@@ -343,6 +408,8 @@
         moves: [],
         status: "waiting",
         winner: null,
+        playerWhite: playerInfo.white,
+        playerBlack: null
       };
       db.ref("chess-matches/"+id).set(initialState).then(()=>{
         waitForPlayer(id);
@@ -356,6 +423,8 @@
           waitingMsg.innerText = "Waiting for another player...";
         } else if (val.status==="playing") {
           gameRef = db.ref("chess-matches/"+id);
+          playerInfo.white = val.playerWhite;
+          playerInfo.black = val.playerBlack;
           startGame(val);
           db.ref("chess-matches/"+id).off();
         }
@@ -365,14 +434,22 @@
       mySide = "black";
       isMyTurn = false;
       gameId = id;
+      playerInfo.black = {
+        name: user.displayName,
+        photo: user.photoURL,
+        uid: user.uid
+      };
       // Mark game as started
       db.ref("chess-matches/"+id).transaction(val=>{
         if (!val || val.status !== "waiting") return;
         val.status = "playing";
+        val.playerBlack = playerInfo.black;
         return val;
       }).then(()=>{
         db.ref("chess-matches/"+id).once("value").then(snap=>{
           let state = snap.val();
+          playerInfo.white = state.playerWhite;
+          playerInfo.black = state.playerBlack;
           gameRef = db.ref("chess-matches/"+id);
           startGame(state);
         });
@@ -386,6 +463,7 @@
       boardContainer.style.display = "";
       clockContainers.forEach(e=>e.style.display="");
       infoBar.style.display = "";
+      userBar.style.display = "";
       // Set up state
       boardState = state.board;
       turn = state.turn;
@@ -398,9 +476,16 @@
       selectedSquare = null;
       validMoves = [];
       winner = null;
-      // Clear captured
-      capturedWhiteDiv.innerHTML = "";
-      capturedBlackDiv.innerHTML = "";
+      // Users
+      playerInfo.white = state.playerWhite;
+      playerInfo.black = state.playerBlack;
+      // Show usernames and avatars
+      userWhite.innerHTML = playerInfo.white
+        ? `<img src="${playerInfo.white.photo}" alt="" />${playerInfo.white.name}${mySide==='white'?' (You)':''}`
+        : '';
+      userBlack.innerHTML = playerInfo.black
+        ? `<img src="${playerInfo.black.photo}" alt="" />${playerInfo.black.name}${mySide==='black'?' (You)':''}`
+        : '';
       // Info bar
       infoBar.innerText = "You are " + (mySide === "white" ? "White (Bottom)" : "Black (Top)");
       // Create board
@@ -444,6 +529,19 @@
           location.reload();
         }
         isMyTurn = (turn === mySide);
+        // Update player info (if changed)
+        if (val.playerWhite && JSON.stringify(playerInfo.white)!==JSON.stringify(val.playerWhite)) {
+          playerInfo.white = val.playerWhite;
+          userWhite.innerHTML = playerInfo.white
+            ? `<img src="${playerInfo.white.photo}" alt="" />${playerInfo.white.name}${mySide==='white'?' (You)':''}`
+            : '';
+        }
+        if (val.playerBlack && JSON.stringify(playerInfo.black)!==JSON.stringify(val.playerBlack)) {
+          playerInfo.black = val.playerBlack;
+          userBlack.innerHTML = playerInfo.black
+            ? `<img src="${playerInfo.black.photo}" alt="" />${playerInfo.black.name}${mySide==='black'?' (You)':''}`
+            : '';
+        }
       });
     }
     // ========== CHESS LOGIC & UI (AS BEFORE, WITH NETWORKING) ==========
@@ -505,11 +603,13 @@
     function declareWinner(winnerSide, how) {
       // Only one user sets this
       if (winner) return;
-      let winText = (winnerSide === "white" ? "White" : "Black") + (how==="timeout" ? " (by timeout)" : (how==="checkmate"?" (checkmate)":""));
+      let winText = (winnerSide === "white"
+        ? (playerInfo.white ? playerInfo.white.name : "White")
+        : (playerInfo.black ? playerInfo.black.name : "Black")
+      ) + (how==="timeout" ? " (by timeout)" : (how==="checkmate"?" (checkmate)":""));
       gameRef.update({winner: winText});
     }
     function endGameByStalemate() {
-      // Only one user sets this
       if (winner) return;
       gameRef.update({winner: "Stalemate"});
     }
@@ -597,7 +697,6 @@
     }
     function createBoardDOM() {
       boardContainer.innerHTML = "";
-      // If I'm black, show board flipped!
       let rows = mySide==="black" ? [...Array(8).keys()].reverse() : [...Array(8).keys()];
       let cols = mySide==="black" ? [...Array(8).keys()].reverse() : [...Array(8).keys()];
       for (let ri = 0; ri < 8; ri++) {
@@ -734,7 +833,6 @@
           }
           const rank = code[0] === "w" ? 7 : 0;
           if (r === rank && c === 4) {
-            // King side castling
             if ((code[0] === "w" ? castlingRights.wK : castlingRights.bK)) {
               if (
                 boardState[rank][5] === "" &&
@@ -749,7 +847,6 @@
                 }
               }
             }
-            // Queen side castling
             if ((code[0] === "w" ? castlingRights.wQ : castlingRights.bQ)) {
               if (
                 boardState[rank][3] === "" &&
@@ -873,7 +970,6 @@
       // Win/lose/stalemate check (for next player)
       let afterMoveBoard = newBoard;
       let afterMoveTurn = opponent(turn);
-      // Checkmate or stalemate?
       let legalExists = false, isCheck = isInCheck(afterMoveTurn);
       for (let r = 0; r < 8; r++) {
         for (let c = 0; c < 8; c++) {
@@ -888,7 +984,6 @@
       }
       if (!legalExists) {
         if (isCheck) {
-          // Win for me
           declareWinner(mySide, "checkmate");
         } else {
           endGameByStalemate();
@@ -990,7 +1085,6 @@
               }
             }
           }
-          // Castling (skip for simplicity in stalemate check)
           break;
         }
       }
@@ -1024,7 +1118,6 @@
         }
         const move = validMoves.find(m => m.row === r && m.col === c);
         if (move) {
-          // Pawn promotion
           let isPromotion = (boardState[selectedSquare.row][selectedSquare.col][1]==="P") &&
             ((mySide==="white"&&move.row===0)||(mySide==="black"&&move.row===7));
           makeMove(selectedSquare, { row: r, col: c }, {...move, promotion: isPromotion});
@@ -1049,8 +1142,7 @@
         }
       }
     }
-    // ========== MODAL BUTTON ==========
     modalRestartBtn.onclick = resetGameAll;
   </script>
 </body>
-      </html>
+  </html>
