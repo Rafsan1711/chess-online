@@ -1,787 +1,1056 @@
 <!DOCTYPE html>
-<html lang="en" class="transition-colors duration-300">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Online Bookstore - Dark Mode & File Upload</title>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-  <!-- Tailwind CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Online Multiplayer Chess</title>
   <style>
-    /* Dark mode styles */
-    html.dark {
-      background-color: #121212;
-      color: #eee;
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
     }
-    /* Modal backdrop */
-    .modal-bg {
-      background: rgba(0,0,0,0.5);
-      position: fixed;
-      inset: 0;
+    body {
+      background-color: #222;
+      color: white;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 1rem;
+      position: relative;
+    }
+    h1 {
+      margin-bottom: 1rem;
+      font-size: 1.5rem;
+      text-align: center;
+    }
+    .captured {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      min-height: 2rem;
+      margin: 0.5rem 0;
+      gap: 0.25rem;
+    }
+    .captured img {
+      width: 2rem;
+      height: 2rem;
+    }
+    .clock-container {
+      width: 100%;
+      max-width: 480px;
+      display: flex;
+      justify-content: center;
+      margin: 0.25rem 0;
+    }
+    .clock {
+      width: 100%;
+      max-width: 200px;
+      padding: 0.5rem 1rem;
+      text-align: center;
+      border: 2px solid white;
+      border-radius: 4px;
+      font-family: monospace;
+      background-color: #333;
+      color: #eee;
+      font-size: 1rem;
+      margin: 30px 0 30px 0;
+    }
+    .active-clock {
+      background-color: white;
+      color: black;
+      font-size: 1.5rem;
+      border-color: #fff;
+    }
+    .inactive-clock {
+      background-color: #333;
+      color: #aaa;
+      font-size: 1rem;
+      border-color: #555;
+    }
+    #board-container {
+      width: 100%;
+      max-width: 480px;
+      aspect-ratio: 1;
+      border: 2px solid white;
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      grid-template-rows: repeat(8, 1fr);
+    }
+    .square {
+      position: relative;
+      width: 100%;
+      height: 100%;
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 50;
-    }
-    /* Modal container */
-    .modal {
-      background-color: #fff;
-      border-radius: 8px;
-      max-width: 400px;
-      width: 90%;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.3);
-      padding: 1.5rem;
-      position: relative;
-      transition: background-color 0.3s;
-    }
-    html.dark .modal {
-      background-color: #222;
-      color: #ddd;
-    }
-    /* Close button */
-    .modal-close {
-      position: absolute;
-      right: 1rem;
-      top: 1rem;
-      font-size: 1.5rem;
+      font-size: 0;
       cursor: pointer;
-      font-weight: bold;
-      color: #888;
-      transition: color 0.3s;
     }
-    .modal-close:hover {
-      color: #f87171; /* red-400 */
+    .square[data-col="0"].light { background-color: #f0d9b5; }
+    .square[data-col="0"].dark  { background-color: #b58863; }
+    .square[data-col="1"].light { background-color: #f0d9b5; }
+    .square[data-col="1"].dark  { background-color: #b58863; }
+    .square[data-col="2"].light { background-color: #f0d9b5; }
+    .square[data-col="2"].dark  { background-color: #b58863; }
+    .square[data-col="3"].light { background-color: #f0d9b5; }
+    .square[data-col="3"].dark  { background-color: #b58863; }
+    .square[data-col="4"].light { background-color: #f0d9b5; }
+    .square[data-col="4"].dark  { background-color: #b58863; }
+    .square[data-col="5"].light { background-color: #f0d9b5; }
+    .square[data-col="5"].dark  { background-color: #b58863; }
+    .square[data-col="6"].light { background-color: #f0d9b5; }
+    .square[data-col="6"].dark  { background-color: #b58863; }
+    .square[data-col="7"].light { background-color: #f0d9b5; }
+    .square[data-col="7"].dark  { background-color: #b58863; }
+    .selected {
+      outline: 3px solid yellow;
     }
-    html.dark .modal-close {
-      color: #aaa;
+    .highlight {
+      background-color: rgba(255, 255, 0, 0.4);
     }
-    /* Toast container */
-    #toast-container {
+    img.piece {
+      width: 90%;
+      height: 90%;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+    #winner-modal {
       position: fixed;
-      bottom: 1.5rem;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 60;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.8);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
     }
-    /* Toast */
-    .toast {
-      background-color: #22c55e; /* green-500 */
-      color: white;
-      padding: 0.75rem 1.25rem;
-      border-radius: 9999px;
-      margin-top: 0.5rem;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-      font-weight: 600;
-      animation: fadein 0.3s, fadeout 0.3s 1.7s forwards;
+    #winner-modal .modal-content {
+      background-color: #111;
+      padding: 2rem;
+      border: 2px solid white;
+      border-radius: 8px;
+      text-align: center;
+      max-width: 80%;
+      color: #4d94ff;
     }
-    @keyframes fadein {
-      from { opacity: 0; transform: translateY(20px); }
-      to { opacity: 1; transform: translateY(0); }
+    #winner-modal .modal-content h2 {
+      margin-bottom: 1rem;
+      font-size: 2rem;
+      color: #ff4d4d;
     }
-    @keyframes fadeout {
-      to { opacity: 0; transform: translateY(20px); }
+    #winner-modal .modal-content button {
+      margin-top: 1rem;
+      padding: 0.5rem 1rem;
+      font-size: 1rem;
+      background-color: #fff;
+      color: #000;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    #winner-modal .modal-content button:hover {
+      background-color: #ddd;
+    }
+    /* Home screen styles */
+    #home-screen {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      background: #111;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+    }
+    #home-screen h1 {
+      font-size: 2.2rem;
+      margin-bottom: 2rem;
+    }
+    #home-screen button {
+      background: #fff;
+      color: #222;
+      font-size: 1.1rem;
+      padding: 0.7rem 2.5rem;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      margin-top: 1rem;
+      font-weight: bold;
+      min-width: 130px;
+    }
+    #home-screen button:disabled {
+      background: #aaa;
+      color: #444;
+      cursor: not-allowed;
+    }
+    #waiting-message {
+      margin-top: 2rem;
+      font-size: 1.2rem;
+      color: #4d94ff;
+    }
+    #info-bar {
+      margin: 0.7rem 0;
+      font-size: 1rem;
+      color: #4d94ff;
+      text-align: center;
+      width: 100%;
     }
   </style>
+  <!-- Firebase scripts (no library, use CDN) -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 </head>
-<body class="bg-gray-50 dark:bg-[#121212] text-gray-900 dark:text-gray-100 min-h-screen flex flex-col">
-
-  <!-- Navbar -->
-  <nav class="flex items-center justify-between p-4 shadow-md bg-white dark:bg-[#1f1f1f] sticky top-0 z-40">
-    <h1 class="font-bold text-xl select-none">Online Bookstore</h1>
-
-    <div class="flex items-center space-x-4">
-      <button id="darkModeToggle" aria-label="Toggle dark mode"
-        class="px-4 py-2 rounded-md bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:from-indigo-600 hover:to-purple-700 transition">
-        Dark Mode
-      </button>
-
-      <span id="navEmail" class="text-sm truncate max-w-xs"></span>
-
-      <button id="signOutBtn" class="bg-red-600 hover:bg-red-700 px-3 py-1 rounded-md text-white transition hidden">
-        Sign Out
-      </button>
-    </div>
-  </nav>
-
-  <!-- Login Screen -->
-  <main id="loginScreen" class="flex-grow flex items-center justify-center p-6 bg-gray-100 dark:bg-[#121212]">
-    <div class="max-w-md w-full bg-white dark:bg-[#222] p-8 rounded-lg shadow-lg">
-      <h2 class="text-2xl font-bold mb-6 text-center">Login to Your Account</h2>
-      <form id="loginForm" class="space-y-4" novalidate>
-        <input
-          id="emailInput"
-          type="email"
-          placeholder="Email"
-          required
-          autocomplete="username"
-          class="w-full p-3 rounded border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#121212] focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        />
-        <input
-          id="passwordInput"
-          type="password"
-          placeholder="Password"
-          required
-          autocomplete="current-password"
-          minlength="6"
-          class="w-full p-3 rounded border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#121212] focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        />
-        <button
-          type="submit"
-          class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded font-semibold transition"
-        >
-          Sign In
-        </button>
-      </form>
-
-      <div class="text-center mt-4">
-        <button
-          id="googleSignInBtn"
-          class="inline-flex items-center justify-center space-x-2 px-4 py-2 border rounded text-gray-700 dark:text-gray-200 border-gray-400 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700 transition"
-        >
-          <img
-            src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/Google_%22G%22_Logo.svg/512px-Google_%22G%22_Logo.svg.png"
-            alt="Google logo"
-            class="w-5 h-5"
-          />
-          <span>Sign in with Google</span>
-        </button>
-      </div>
-    </div>
-  </main>
-
-  <!-- Home Screen -->
-  <main id="homeScreen" class="hidden flex-grow flex flex-col p-6 bg-gray-50 dark:bg-[#121212] overflow-auto">
-    <!-- Search bar -->
-    <div class="mb-6 max-w-xl mx-auto relative">
-      <input
-        id="searchInput"
-        type="search"
-        placeholder="Search books by title..."
-        autocomplete="off"
-        class="w-full rounded border border-gray-300 dark:border-gray-700 p-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-[#1f1f1f] text-gray-900 dark:text-gray-100"
-      />
-      <div
-        id="searchResults"
-        class="absolute z-30 bg-white dark:bg-[#222] rounded shadow-lg w-full max-h-64 overflow-y-auto mt-1 hidden"
-      ></div>
-    </div>
-
-    <!-- Owner Buttons -->
-    <div id="ownerControls" class="mb-6 flex justify-center space-x-4 hidden">
-      <button
-        id="addCategoryBtn"
-        class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-md font-semibold transition"
-      >
-        Add Category
-      </button>
-      <button
-        id="addBookBtn"
-        class="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-md font-semibold transition"
-      >
-        Add Book
-      </button>
-    </div>
-
-    <!-- Categories and books container -->
-    <section id="categoriesContainer" class="max-w-5xl mx-auto space-y-10"></section>
-
-    <!-- Navigation -->
-    <nav class="fixed bottom-0 left-0 w-full bg-white dark:bg-[#1f1f1f] border-t border-gray-300 dark:border-gray-700 flex justify-around py-3 text-gray-700 dark:text-gray-300">
-      <button id="navHome" class="focus:outline-none font-semibold hover:text-indigo-600 dark:hover:text-indigo-400">Home</button>
-      <button id="navWishlist" class="focus:outline-none font-semibold hover:text-pink-600 dark:hover:text-pink-400">Wishlist</button>
-      <button id="navCart" class="focus:outline-none font-semibold hover:text-yellow-500 dark:hover:text-yellow-400">Cart</button>
-    </nav>
-  </main>
-
-  <!-- Modals -->
-  <div id="modalBg" class="modal-bg hidden">
-    <div id="modalContent" class="modal"></div>
+<body>
+  <div id="home-screen">
+    <h1>♟️ Online Chess ♟️</h1>
+    <button id="play-btn">Play</button>
+    <div id="waiting-message" style="display:none;">Waiting for another player...</div>
   </div>
-
-  <!-- Toast container -->
-  <div id="toast-container"></div>
-
+  <div id="info-bar" style="display:none;"></div>
+  <div id="captured-white" class="captured" style="display:none;"></div>
+  <div class="clock-container" style="display:none;">
+    <div id="black-clock" class="clock active-clock">10:00</div>
+  </div>
+  <div id="board-container" style="display:none;"></div>
+  <div class="clock-container" style="display:none;">
+    <div id="white-clock" class="clock inactive-clock">10:00</div>
+  </div>
+  <div id="captured-black" class="captured" style="display:none;"></div>
+  <div id="winner-modal">
+    <div class="modal-content">
+      <h2 id="winner-text">Winner: </h2>
+      <button id="modal-restart-btn">Play Again</button>
+    </div>
+  </div>
   <script>
-    // Firebase config & init here (নিজের config বসাতে হবে)
-    const firebaseConfig = {
-  apiKey: "AIzaSyB-5CakD79CthsI-_vcqblOCN1sXS6U8u8",
-  authDomain: "dot-and-box-90d27.firebaseapp.com",
-  databaseURL: "https://dot-and-box-90d27-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "dot-and-box-90d27",
-  storageBucket: "dot-and-box-90d27.firebasestorage.app",
-  messagingSenderId: "913945926983",
-  appId: "1:913945926983:web:b4c00c2cffff5b6fa7c062"
-
-      // তোমার Firebase config এখানে বসাও
+    // ===== FIREBASE CONFIGURATION =====
+    var firebaseConfig = {
+      apiKey: "AIzaSyD4-hVvefrYoGk5VmU4uR5Tj2lHn2Xz8sM",
+      authDomain: "dot-and-box-game.firebaseapp.com",
+      databaseURL: "https://dot-and-box-game-default-rtdb.firebaseio.com",
+      projectId: "dot-and-box-game",
+      storageBucket: "dot-and-box-game.appspot.com",
+      messagingSenderId: "127026956392",
+      appId: "1:127026956392:web:a2bd8cbb10be4b3a3b8cff"
     };
     firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const db = firebase.database();
+    var db = firebase.database();
 
-    const OWNER_EMAIL = "samiulhaquerafsan@gmail.com";
+    // ==== DOM refs ====
+    const homeScreen = document.getElementById("home-screen");
+    const playBtn = document.getElementById("play-btn");
+    const waitingMsg = document.getElementById("waiting-message");
+    const infoBar = document.getElementById("info-bar");
+    const boardContainer = document.getElementById("board-container");
+    const modal = document.getElementById("winner-modal");
+    const winnerText = document.getElementById("winner-text");
+    const modalRestartBtn = document.getElementById("modal-restart-btn");
+    const capturedWhiteDiv = document.getElementById("captured-white");
+    const capturedBlackDiv = document.getElementById("captured-black");
+    const whiteClockDiv = document.getElementById("white-clock");
+    const blackClockDiv = document.getElementById("black-clock");
+    const clockContainers = document.querySelectorAll('.clock-container');
+    // ========== GAME STATE VARS ==========
+    let boardState = [];
+    let selectedSquare = null;
+    let validMoves = [];
+    let turn = "white";
+    let castlingRights = { wK: true, wQ: true, bK: true, bQ: true };
+    let enPassantTarget = null;
+    let halfmoveClock = 0;
+    let fullmoveNumber = 1;
+    let whiteTime = 600;
+    let blackTime = 600;
+    let clockInterval = null;
+    let mySide = null; // "white" or "black"
+    let gameId = null;
+    let isMyTurn = false;
+    let connected = false;
+    let winner = null;
+    let gameRef = null;
+    let lastMoveSound = null;
 
-    // Elements
-    const loginScreen = document.getElementById("loginScreen");
-    const homeScreen = document.getElementById("homeScreen");
-    const navEmail = document.getElementById("navEmail");
-    const signOutBtn = document.getElementById("signOutBtn");
-    const darkModeToggle = document.getElementById("darkModeToggle");
-
-    const addCategoryBtn = document.getElementById("addCategoryBtn");
-    const addBookBtn = document.getElementById("addBookBtn");
-    const categoriesContainer = document.getElementById("categoriesContainer");
-    const searchInput = document.getElementById("searchInput");
-    const searchResults = document.getElementById("searchResults");
-    const modalBg = document.getElementById("modalBg");
-    const modalContent = document.getElementById("modalContent");
-    const toastContainer = document.getElementById("toast-container");
-
-    let currentUser = null;
-
-    // Dark mode load & toggle
-    function applyDarkMode(isDark) {
-      if (isDark) {
-        document.documentElement.classList.add("dark");
-        darkModeToggle.textContent = "Light Mode";
-        localStorage.setItem("darkMode", "true");
-      } else {
-        document.documentElement.classList.remove("dark");
-        darkModeToggle.textContent = "Dark Mode";
-        localStorage.setItem("darkMode", "false");
-      }
-    }
-    // Initialize dark mode based on saved preference
-    applyDarkMode(localStorage.getItem("darkMode") === "true");
-
-    darkModeToggle.onclick = () => {
-      applyDarkMode(!document.documentElement.classList.contains("dark"));
+    // Piece images mapping (relative to root!)
+    const pieceImages = {
+      wP: "pieces/wP.svg",
+      wR: "pieces/wR.svg",
+      wN: "pieces/wN.svg",
+      wB: "pieces/wB.svg",
+      wQ: "pieces/wQ.svg",
+      wK: "pieces/wK.svg",
+      bP: "pieces/bP.svg",
+      bR: "pieces/bR.svg",
+      bN: "pieces/bN.svg",
+      bB: "pieces/bB.svg",
+      bQ: "pieces/bQ.svg",
+      bK: "pieces/bK.svg",
     };
-
-    // Show toast
-    function showToast(msg, duration = 2500) {
-      const toast = document.createElement("div");
-      toast.className = "toast";
-      toast.textContent = msg;
-      toastContainer.appendChild(toast);
-      setTimeout(() => {
-        toast.remove();
-      }, duration);
-    }
-
-    // Show modal with HTML content
-    function showModal(html) {
-      modalContent.innerHTML = html;
-      modalBg.classList.remove("hidden");
-      // Close on clicking backdrop
-      modalBg.onclick = (e) => {
-        if (e.target === modalBg) closeModal();
-      };
-      // Close button handler
-      const closeBtn = modalContent.querySelector(".modal-close");
-      if (closeBtn) {
-        closeBtn.onclick = closeModal;
-      }
-    }
-    function closeModal() {
-      modalBg.classList.add("hidden");
-      modalContent.innerHTML = "";
-    }
-
-    // Authentication
-
-    // Login form
-    const loginForm = document.getElementById("loginForm");
-    loginForm.onsubmit = async (e) => {
-      e.preventDefault();
-      const email = loginForm.emailInput.value.trim();
-      const password = loginForm.passwordInput.value;
-      if (!email || !password) {
-        showToast("Email & Password required");
-        return;
-      }
-      try {
-        const userCredential = await auth.signInWithEmailAndPassword(email, password);
-        if (!userCredential.user.emailVerified) {
-          showToast("Please verify your email first");
-          await auth.signOut();
-        }
-      } catch (error) {
-        showToast(error.message);
-      }
-    };
-
-    // Google sign-in
-    const googleSignInBtn = document.getElementById("googleSignInBtn");
-    googleSignInBtn.onclick = async () => {
-      const provider = new firebase.auth.GoogleAuthProvider();
-      try {
-        const result = await auth.signInWithPopup(provider);
-        if (!result.user.emailVerified) {
-          await result.user.sendEmailVerification();
-          showToast("Verification email sent to your Google account.");
-        }
-      } catch (error) {
-        showToast(error.message);
-      }
-    };
-
-    // Sign out
-    signOutBtn.onclick = () => {
-      auth.signOut();
-    };
-
-    // On auth state changed
-    auth.onAuthStateChanged(async (user) => {
-      if (user && user.emailVerified) {
-        currentUser = user;
-        loginScreen.classList.add("hidden");
-        homeScreen.classList.remove("hidden");
-        navEmail.textContent = user.email;
-        signOutBtn.classList.remove("hidden");
-
-        // Show owner controls only to OWNER_EMAIL
-        if (user.email === OWNER_EMAIL) {
-          addCategoryBtn.classList.remove("hidden");
-          addBookBtn.classList.remove("hidden");
+    // ========== HOME SCREEN & MATCHMAKING ==========
+    playBtn.onclick = function() {
+      playBtn.disabled = true;
+      waitingMsg.style.display = "";
+      // Find a waiting game or make new
+      db.ref("chess-matches/").once("value").then(snap => {
+        let found = false;
+        let foundKey = null;
+        snap.forEach(child => {
+          let val = child.val();
+          if (val.status === "waiting") {
+            found = true;
+            foundKey = child.key;
+          }
+        });
+        if (found) {
+          // Join as black
+          joinGame(foundKey);
         } else {
-          addCategoryBtn.classList.add("hidden");
-          addBookBtn.classList.add("hidden");
+          // Create new as white
+          createGame();
         }
-        loadCategoriesAndBooks();
-      } else {
-        currentUser = null;
-        loginScreen.classList.remove("hidden");
-        homeScreen.classList.add("hidden");
-        signOutBtn.classList.add("hidden");
-      }
-    });
-
-    // Load categories and books from Firebase DB
-    async function loadCategoriesAndBooks() {
-      categoriesContainer.innerHTML = "";
-      try {
-        const categoriesSnap = await db.ref("categories").once("value");
-        const categories = categoriesSnap.val() || {};
-
-        for (const [catId, catName] of Object.entries(categories)) {
-          // Create category section
-          const catSection = document.createElement("section");
-          catSection.className = "mb-10";
-
-          // Category header with owner controls
-          const header = document.createElement("div");
-          header.className = "flex items-center justify-between mb-4";
-          header.innerHTML = `
-            <h2 class="text-2xl font-semibold">${catName}</h2>
-          `;
-          if (currentUser?.email === OWNER_EMAIL) {
-            const editCatBtn = document.createElement("button");
-            editCatBtn.textContent = "Edit";
-            editCatBtn.className = "text-sm px-2 py-1 bg-yellow-500 hover:bg-yellow-600 text-white rounded transition";
-            editCatBtn.onclick = () => openEditCategoryModal(catId, catName);
-            header.appendChild(editCatBtn);
-          }
-          catSection.appendChild(header);
-
-          // Books grid for this category
-          const booksGrid = document.createElement("div");
-          booksGrid.className = "grid grid-cols-2 sm:grid-cols-4 gap-4";
-
-          // Load books for this category
-          const booksSnap = await db.ref("books").orderByChild("categoryId").equalTo(catId).once("value");
-          const books = booksSnap.val() || {};
-          if (Object.keys(books).length === 0) {
-            const noBooks = document.createElement("p");
-            noBooks.textContent = "No books in this category yet.";
-            noBooks.className = "text-gray-500 italic";
-            catSection.appendChild(noBooks);
-          } else {
-            for (const [bookId, book] of Object.entries(books)) {
-              const card = createBookCard(book, bookId);
-              booksGrid.appendChild(card);
-            }
-            catSection.appendChild(booksGrid);
-          }
-
-          categoriesContainer.appendChild(catSection);
-        }
-      } catch (err) {
-        categoriesContainer.innerHTML = `<p class="text-red-600">Error loading categories: ${err.message}</p>`;
-      }
-    }
-
-    // Create book card element
-    function createBookCard(book, bookId) {
-      const card = document.createElement("div");
-      card.className = "bg-white dark:bg-[#1f1f1f] rounded shadow p-2 cursor-pointer hover:shadow-lg transition flex flex-col";
-
-      const img = document.createElement("img");
-      img.src = book.coverUrl || "https://via.placeholder.com/150x200?text=No+Image";
-      img.alt = book.title;
-      img.className = "rounded h-48 object-contain mb-2";
-      card.appendChild(img);
-
-      const title = document.createElement("h3");
-      title.textContent = book.title;
-      title.className = "text-center font-semibold text-gray-900 dark:text-gray-100 truncate";
-      card.appendChild(title);
-
-      card.onclick = () => openBookDetail(bookId);
-
-      return card;
-    }
-
-    // Open book detail modal
-    // Open book detail modal
-async function openBookDetail(bookId) {
-  try {
-    const snap = await db.ref("books/" + bookId).once("value");
-    const book = snap.val();
-    if (!book) {
-      showToast("Book not found");
-      return;
-    }
-
-    let modalHtml = `
-      <button class="modal-close" aria-label="Close">&times;</button>
-      <div class="flex flex-col items-center space-y-4">
-        <img src="${book.coverUrl || "https://via.placeholder.com/150x200?text=No+Image"}" alt="${book.title}" class="w-40 h-60 object-contain rounded shadow" />
-        <h2 class="text-xl font-bold text-center">${book.title}</h2>
-        <p class="text-gray-600 dark:text-gray-400 text-center italic">by ${book.author}</p>
-        <div class="w-full max-w-md">
-          <h3 class="font-semibold mb-2">Comments:</h3>
-          <div id="commentsList" class="max-h-48 overflow-y-auto bg-gray-100 dark:bg-[#2a2a2a] p-3 rounded"></div>
-          <textarea id="commentInput" rows="3" placeholder="Add a comment..."
-            class="w-full mt-3 p-2 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#121212] text-gray-900 dark:text-gray-100 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
-          <button id="submitCommentBtn" class="mt-2 w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded font-semibold transition">Submit Comment</button>
-        </div>
-      </div>
-    `;
-
-    showModal(modalHtml);
-
-    // Load comments
-    const commentsList = document.getElementById("commentsList");
-    const commentsSnap = await db.ref(`comments/${bookId}`).once("value");
-    const comments = commentsSnap.val() || {};
-    commentsList.innerHTML = "";
-    for (const [cid, comment] of Object.entries(comments)) {
-      const cDiv = document.createElement("div");
-      cDiv.className = "mb-2 border-b border-gray-300 dark:border-gray-700 pb-1 text-sm";
-      cDiv.textContent = comment.text;
-      commentsList.appendChild(cDiv);
-    }
-
-    // Submit comment
-    const submitCommentBtn = document.getElementById("submitCommentBtn");
-    const commentInput = document.getElementById("commentInput");
-
-    submitCommentBtn.onclick = async () => {
-      const text = commentInput.value.trim();
-      if (!text) {
-        showToast("Comment cannot be empty");
-        return;
-      }
-      if (!currentUser) {
-        showToast("Please login to comment");
-        return;
-      }
-      const newCommentRef = db.ref(`comments/${bookId}`).push();
-      await newCommentRef.set({
-        userId: currentUser.uid,
-        email: currentUser.email,
-        text,
-        timestamp: Date.now(),
       });
-      // Add comment to UI
-      const cDiv = document.createElement("div");
-      cDiv.className = "mb-2 border-b border-gray-300 dark:border-gray-700 pb-1 text-sm";
-      cDiv.textContent = text;
-      commentsList.appendChild(cDiv);
-      commentInput.value = "";
-      showToast("Comment added");
     };
-  } catch (err) {
-    showToast("Error loading book details: " + err.message);
-  }
-}
 
-// Add category modal open and handlers
-addCategoryBtn.onclick = () => {
-  showModal(`
-    <button class="modal-close" aria-label="Close">&times;</button>
-    <h2 class="text-xl font-bold mb-4">Add New Category</h2>
-    <input id="newCategoryInput" type="text" placeholder="Category name"
-      class="w-full p-3 mb-4 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#121212] text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-    <button id="saveCategoryBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded font-semibold transition">Save Category</button>
-  `);
-
-  document.getElementById("saveCategoryBtn").onclick = async () => {
-    const input = document.getElementById("newCategoryInput");
-    const name = input.value.trim();
-    if (!name) {
-      showToast("Category name cannot be empty");
-      return;
-    }
-    try {
-      const newCatRef = db.ref("categories").push();
-      await newCatRef.set(name);
-      closeModal();
-      showToast("Category added");
-      loadCategoriesAndBooks();
-    } catch (err) {
-      showToast("Failed to add category: " + err.message);
-    }
-  };
-};
-
-// Edit category modal
-function openEditCategoryModal(catId, currentName) {
-  showModal(`
-    <button class="modal-close" aria-label="Close">&times;</button>
-    <h2 class="text-xl font-bold mb-4">Edit Category</h2>
-    <input id="editCategoryInput" type="text" value="${currentName}" 
-      class="w-full p-3 mb-4 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#121212] text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-    <button id="updateCategoryBtn" class="w-full bg-yellow-500 hover:bg-yellow-600 text-white py-2 rounded font-semibold transition">Update Category</button>
-  `);
-
-  document.getElementById("updateCategoryBtn").onclick = async () => {
-    const input = document.getElementById("editCategoryInput");
-    const name = input.value.trim();
-    if (!name) {
-      showToast("Category name cannot be empty");
-      return;
-    }
-    try {
-      await db.ref("categories/" + catId).set(name);
-      closeModal();
-      showToast("Category updated");
-      loadCategoriesAndBooks();
-    } catch (err) {
-      showToast("Failed to update category: " + err.message);
-    }
-  };
-}
-
-// Add book modal open and handlers
-addBookBtn.onclick = async () => {
-  // Load categories to select
-  const catSnap = await db.ref("categories").once("value");
-  const categories = catSnap.val() || {};
-
-  let optionsHtml = `<option value="" disabled selected>Select category</option>`;
-  for (const [id, name] of Object.entries(categories)) {
-    optionsHtml += `<option value="${id}">${name}</option>`;
-  }
-
-  showModal(`
-    <button class="modal-close" aria-label="Close">&times;</button>
-    <h2 class="text-xl font-bold mb-4">Add New Book</h2>
-    <input id="bookTitleInput" type="text" placeholder="Book Title"
-      class="w-full p-3 mb-3 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#121212] text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-    <input id="bookAuthorInput" type="text" placeholder="Author Name"
-      class="w-full p-3 mb-3 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#121212] text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-    <select id="bookCategorySelect" class="w-full p-3 mb-3 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#121212] text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-      ${optionsHtml}
-    </select>
-    <label class="block mb-2 text-sm font-semibold">Book Cover Thumbnail (Image file)</label>
-    <input id="bookThumbnailFile" type="file" accept="image/*" 
-      class="w-full mb-4 rounded border border-gray-300 dark:border-gray-700 p-2 bg-white dark:bg-[#121212] text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-    <button id="saveBookBtn" class="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded font-semibold transition">Save Book</button>
-  `);
-
-  const saveBookBtn = document.getElementById("saveBookBtn");
-  const bookThumbnailFileInput = document.getElementById("bookThumbnailFile");
-
-  saveBookBtn.onclick = async () => {
-    const title = document.getElementById("bookTitleInput").value.trim();
-    const author = document.getElementById("bookAuthorInput").value.trim();
-    const categoryId = document.getElementById("bookCategorySelect").value;
-    const file = bookThumbnailFileInput.files[0];
-
-    if (!title || !author || !categoryId) {
-      showToast("Please fill all fields");
-      return;
-    }
-    if (!file) {
-      showToast("Please select a thumbnail image");
-      return;
-    }
-    if (!currentUser || currentUser.email !== OWNER_EMAIL) {
-      showToast("Only the owner can add books");
-      return;
-    }
-
-    try {
-      // Upload file to Firebase Storage
-      const storageRef = firebase.storage().ref();
-      const fileRef = storageRef.child("book_thumbnails/" + Date.now() + "_" + file.name);
-      await fileRef.put(file);
-      const downloadURL = await fileRef.getDownloadURL();
-
-      // Save book info to database
-      const newBookRef = db.ref("books").push();
-      await newBookRef.set({
-        title,
-        author,
-        categoryId,
-        coverUrl: downloadURL,
+    function createGame() {
+      // Random id
+      let id = "game_" + Math.random().toString(36).substr(2,9);
+      gameId = id;
+      mySide = "white";
+      isMyTurn = true;
+      // Setup initial state
+      let initialState = {
+        board: [
+          ["bR","bN","bB","bQ","bK","bB","bN","bR"],
+          ["bP","bP","bP","bP","bP","bP","bP","bP"],
+          ["","","","","","","",""],
+          ["","","","","","","",""],
+          ["","","","","","","",""],
+          ["","","","","","","",""],
+          ["wP","wP","wP","wP","wP","wP","wP","wP"],
+          ["wR","wN","wB","wQ","wK","wB","wN","wR"]
+        ],
+        turn: "white",
+        castling: { wK: true, wQ: true, bK: true, bQ: true },
+        enPassant: null,
+        whiteTime: 600,
+        blackTime: 600,
+        moves: [],
+        status: "waiting",
+        winner: null,
+      };
+      db.ref("chess-matches/"+id).set(initialState).then(()=>{
+        waitForPlayer(id);
       });
-
-      closeModal();
-      showToast("Book added successfully");
-      loadCategoriesAndBooks();
-    } catch (err) {
-      showToast("Error adding book: " + err.message);
     }
-  };
-};
-
-// Search functionality
-searchInput.addEventListener("input", async () => {
-  const query = searchInput.value.trim().toLowerCase();
-  if (!query) {
-    searchResults.classList.add("hidden");
-    searchResults.innerHTML = "";
-    return;
-  }
-
-  try {
-    const booksSnap = await db.ref("books").once("value");
-    const books = booksSnap.val() || {};
-    const matched = Object.entries(books).filter(([id, book]) =>
-      book.title.toLowerCase().includes(query)
-    );
-
-    if (matched.length === 0) {
-      searchResults.innerHTML = `<p class="p-3 text-gray-600 dark:text-gray-400">No results found.</p>`;
-    } else {
-      searchResults.innerHTML = matched
-        .map(
-          ([id, book]) => `
-          <div class="p-2 cursor-pointer hover:bg-indigo-600 hover:text-white transition truncate" data-id="${id}">
-            ${book.title}
-          </div>`
-        )
-        .join("");
+    function waitForPlayer(id) {
+      db.ref("chess-matches/"+id).on("value", snap=>{
+        let val = snap.val();
+        if (!val) return;
+        if (val.status === "waiting") {
+          waitingMsg.innerText = "Waiting for another player...";
+        } else if (val.status==="playing") {
+          gameRef = db.ref("chess-matches/"+id);
+          startGame(val);
+          db.ref("chess-matches/"+id).off();
+        }
+      });
     }
-    searchResults.classList.remove("hidden");
-  } catch (err) {
-    searchResults.innerHTML = `<p class="p-3 text-red-600">Error searching: ${err.message}</p>`;
-    searchResults.classList.remove("hidden");
-  }
-});
-
-// Click on search result
-searchResults.addEventListener("click", (e) => {
-  const div = e.target.closest("div[data-id]");
-  if (div) {
-    const bookId = div.getAttribute("data-id");
-    searchResults.classList.add("hidden");
-    searchInput.value = "";
-    openBookDetail(bookId);
-  }
-});
-
-// Hide search results on outside click
-document.addEventListener("click", (e) => {
-  if (!searchResults.contains(e.target) && e.target !== searchInput) {
-    searchResults.classList.add("hidden");
-  }
-});
-
-// Navigation buttons
-document.getElementById("navHome").onclick = () => {
-  loadCategoriesAndBooks();
-};
-document.getElementById("navWishlist").onclick = async () => {
-  if (!currentUser) {
-    showToast("Please login to see your wishlist");
-    return;
-  }
-  categoriesContainer.innerHTML = "<p>Loading wishlist...</p>";
-  try {
-    const wishlistSnap = await db.ref("wishlist/" + currentUser.uid).once("value");
-    const bookIds = wishlistSnap.exists() ? Object.keys(wishlistSnap.val()) : [];
-    if (bookIds.length === 0) {
-      categoriesContainer.innerHTML = "<p class='text-gray-500 text-center'>Your wishlist is empty.</p>";
-      return;
+    function joinGame(id) {
+      mySide = "black";
+      isMyTurn = false;
+      gameId = id;
+      // Mark game as started
+      db.ref("chess-matches/"+id).transaction(val=>{
+        if (!val || val.status !== "waiting") return;
+        val.status = "playing";
+        return val;
+      }).then(()=>{
+        db.ref("chess-matches/"+id).once("value").then(snap=>{
+          let state = snap.val();
+          gameRef = db.ref("chess-matches/"+id);
+          startGame(state);
+        });
+      });
     }
-    // Load wishlist books
-    categoriesContainer.innerHTML = "";
-    const booksGrid = document.createElement("div");
-    booksGrid.className = "grid grid-cols-2 sm:grid-cols-4 gap-4";
-    for (const bookId of bookIds) {
-      const snap = await db.ref("books/" + bookId).once("value");
-      const book = snap.val();
-      if (book) {
-        booksGrid.appendChild(createBookCard(book, bookId));
+    function startGame(state) {
+      // Hide home, show all
+      homeScreen.style.display = "none";
+      document.getElementById("captured-white").style.display = "";
+      document.getElementById("captured-black").style.display = "";
+      boardContainer.style.display = "";
+      clockContainers.forEach(e=>e.style.display="");
+      infoBar.style.display = "";
+      // Set up state
+      boardState = state.board;
+      turn = state.turn;
+      castlingRights = state.castling;
+      enPassantTarget = state.enPassant;
+      whiteTime = state.whiteTime;
+      blackTime = state.blackTime;
+      halfmoveClock = 0;
+      fullmoveNumber = 1;
+      selectedSquare = null;
+      validMoves = [];
+      winner = null;
+      // Clear captured
+      capturedWhiteDiv.innerHTML = "";
+      capturedBlackDiv.innerHTML = "";
+      // Info bar
+      infoBar.innerText = "You are " + (mySide === "white" ? "White (Bottom)" : "Black (Top)");
+      // Create board
+      createBoardDOM();
+      renderPieces();
+      updateHighlights();
+      updateClocksDisplay();
+      startClock();
+      // Listen for moves
+      listenForGameUpdates();
+    }
+    function listenForGameUpdates() {
+      db.ref("chess-matches/"+gameId).on("value", snap=>{
+        let val = snap.val();
+        if (!val) return;
+        // Game ended?
+        if (val.winner && !winner) {
+          winner = val.winner;
+          openModal(val.winner);
+        }
+        // Moves
+        if (JSON.stringify(boardState)!==JSON.stringify(val.board)) {
+          boardState = val.board;
+          turn = val.turn;
+          castlingRights = val.castling;
+          enPassantTarget = val.enPassant;
+          whiteTime = val.whiteTime;
+          blackTime = val.blackTime;
+          renderPieces();
+          updateHighlights();
+          updateClocksDisplay();
+        } else {
+          turn = val.turn;
+          castlingRights = val.castling;
+          enPassantTarget = val.enPassant;
+          whiteTime = val.whiteTime;
+          blackTime = val.blackTime;
+          updateClocksDisplay();
+        }
+        if (val.status==="reset") {
+          location.reload();
+        }
+        isMyTurn = (turn === mySide);
+      });
+    }
+    // ========== CHESS LOGIC & UI (AS BEFORE, WITH NETWORKING) ==========
+    function formatTime(sec) {
+      const m = Math.floor(sec / 60).toString().padStart(2, "0");
+      const s = (sec % 60).toString().padStart(2, "0");
+      return `${m}:${s}`;
+    }
+    function updateClocksDisplay() {
+      whiteClockDiv.textContent = formatTime(whiteTime);
+      blackClockDiv.textContent = formatTime(blackTime);
+      if (turn === "white") {
+        whiteClockDiv.classList.add("active-clock");
+        whiteClockDiv.classList.remove("inactive-clock");
+        blackClockDiv.classList.add("inactive-clock");
+        blackClockDiv.classList.remove("active-clock");
+      } else {
+        blackClockDiv.classList.add("active-clock");
+        blackClockDiv.classList.remove("inactive-clock");
+        whiteClockDiv.classList.add("inactive-clock");
+        whiteClockDiv.classList.remove("active-clock");
       }
     }
-    categoriesContainer.appendChild(booksGrid);
-  } catch (err) {
-    showToast("Failed to load wishlist: " + err.message);
-  }
-};
-document.getElementById("navCart").onclick = async () => {
-  if (!currentUser) {
-    showToast("Please login to see your cart");
-    return;
-  }
-  categoriesContainer.innerHTML = "<p>Loading cart...</p>";
-  try {
-    const cartSnap = await db.ref("cart/" + currentUser.uid).once("value");
-    const bookIds = cartSnap.exists() ? Object.keys(cartSnap.val()) : [];
-    if (bookIds.length === 0) {
-      categoriesContainer.innerHTML = "<p class='text-gray-500 text-center'>Your cart is empty.</p>";
-      return;
+    function startClock() {
+      clearInterval(clockInterval);
+      clockInterval = setInterval(() => {
+        if (!isMyTurn) return; // Only decrease own clock
+        if (mySide === "white" && turn === "white") {
+          whiteTime--;
+          if (whiteTime <= 0) {
+            whiteTime = 0;
+            declareWinner("black", "timeout");
+          }
+        } else if (mySide === "black" && turn === "black") {
+          blackTime--;
+          if (blackTime <= 0) {
+            blackTime = 0;
+            declareWinner("white", "timeout");
+          }
+        }
+        updateClocksDisplay();
+        // Sync time to db
+        if (gameRef) {
+          let update = {};
+          if (turn==="white") update.whiteTime = whiteTime;
+          else update.blackTime = blackTime;
+          gameRef.update(update);
+        }
+      }, 1000);
     }
-    // Load cart books
-    categoriesContainer.innerHTML = "";
-    const booksGrid = document.createElement("div");
-    booksGrid.className = "grid grid-cols-2 sm:grid-cols-4 gap-4";
-    for (const bookId of bookIds) {
-      const snap = await db.ref("books/" + bookId).once("value");
-      const book = snap.val();
-      if (book) {
-        booksGrid.appendChild(createBookCard(book, bookId));
+    function stopClock() {
+      clearInterval(clockInterval);
+    }
+    function openModal(winnerTextMsg) {
+      winnerText.textContent = `Winner: ${winnerTextMsg}`;
+      modal.style.display = "flex";
+      stopClock();
+    }
+    function declareWinner(winnerSide, how) {
+      // Only one user sets this
+      if (winner) return;
+      let winText = (winnerSide === "white" ? "White" : "Black") + (how==="timeout" ? " (by timeout)" : (how==="checkmate"?" (checkmate)":""));
+      gameRef.update({winner: winText});
+    }
+    function endGameByStalemate() {
+      // Only one user sets this
+      if (winner) return;
+      gameRef.update({winner: "Stalemate"});
+    }
+    function resetGameAll() {
+      modal.style.display = "none";
+      if (gameRef) gameRef.update({status:"reset"});
+      setTimeout(()=>location.reload(),200);
+    }
+    function isWhitePiece(code) {
+      return code && code.startsWith("w");
+    }
+    function isBlackPiece(code) {
+      return code && code.startsWith("b");
+    }
+    function opponent(side) {
+      return side === "white" ? "black" : "white";
+    }
+    function capitalize(str) {
+      return str.charAt(0).toUpperCase() + str.slice(1);
+    }
+    function findKing(side) {
+      const target = (side === "white" ? "wK" : "bK");
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          if (boardState[r][c] === target) return { row: r, col: c };
+        }
+      }
+      return null;
+    }
+    function isSquareAttacked(side, row, col) {
+      const opp = side === "white" ? "b" : "w";
+      const directions = [
+        { dr: -1, dc:  0 }, { dr: 1, dc:  0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 },
+        { dr: -1, dc: -1 }, { dr: -1, dc: 1 }, { dr: 1, dc: -1 }, { dr: 1, dc: 1 }
+      ];
+      for (const d of directions) {
+        let r = row + d.dr, c = col + d.dc;
+        while (r >= 0 && r < 8 && c >= 0 && c < 8) {
+          const code = boardState[r][c];
+          if (code) {
+            if (code.startsWith(opp)) {
+              const p = code[1];
+              if (
+                (d.dr === 0 || d.dc === 0) && (p === "R" || p === "Q") ||
+                (d.dr !== 0 && d.dc !== 0) && (p === "B" || p === "Q")
+              ) return true;
+              break;
+            } else { break; }
+          }
+          r += d.dr; c += d.dc;
+        }
+      }
+      const knightDeltas = [
+        { dr: -2, dc: -1 }, { dr: -2, dc: 1 }, { dr: -1, dc: -2 }, { dr: -1, dc: 2 },
+        { dr: 1, dc: -2 }, { dr: 1, dc: 2 }, { dr: 2, dc: -1 }, { dr: 2, dc: 1 }
+      ];
+      for (const d of knightDeltas) {
+        const r2 = row + d.dr, c2 = col + d.dc;
+        if (r2 >= 0 && r2 < 8 && c2 >= 0 && c2 < 8) {
+          if (boardState[r2][c2] === opp + "N") return true;
+        }
+      }
+      const pawnDir = side === "white" ? -1 : 1;
+      for (const dc of [-1, 1]) {
+        const r2 = row + pawnDir, c2 = col + dc;
+        if (r2 >= 0 && r2 < 8 && c2 >= 0 && c2 < 8) {
+          if (boardState[r2][c2] === opp + "P") return true;
+        }
+      }
+      for (const d of directions) {
+        const r2 = row + d.dr, c2 = col + d.dc;
+        if (r2 >= 0 && r2 < 8 && c2 >= 0 && c2 < 8) {
+          if (boardState[r2][c2] === opp + "K") return true;
+        }
+      }
+      return false;
+    }
+    function isInCheck(side) {
+      const kingPos = findKing(side);
+      if (!kingPos) return false;
+      return isSquareAttacked(side, kingPos.row, kingPos.col);
+    }
+    function getSquareDiv(row, col) {
+      return document.querySelector(`.square[data-row="${row}"][data-col="${col}"]`);
+    }
+    function createBoardDOM() {
+      boardContainer.innerHTML = "";
+      // If I'm black, show board flipped!
+      let rows = mySide==="black" ? [...Array(8).keys()].reverse() : [...Array(8).keys()];
+      let cols = mySide==="black" ? [...Array(8).keys()].reverse() : [...Array(8).keys()];
+      for (let ri = 0; ri < 8; ri++) {
+        for (let ci = 0; ci < 8; ci++) {
+          let row = rows[ri];
+          let col = cols[ci];
+          const sq = document.createElement("div");
+          sq.classList.add(
+            "square",
+            ((row + col) % 2 === 0) ? "light" : "dark"
+          );
+          sq.dataset.row = row;
+          sq.dataset.col = col;
+          sq.addEventListener("click", () => onSquareClick(row, col));
+          boardContainer.appendChild(sq);
+        }
       }
     }
-    categoriesContainer.appendChild(booksGrid);
-  } catch (err) {
-    showToast("Failed to load cart: " + err.message);
-  }
-};
+    function renderPieces() {
+      document.querySelectorAll("img.piece").forEach(el => el.remove());
+      for (let row = 0; row < 8; row++) {
+        for (let col = 0; col < 8; col++) {
+          const code = boardState[row][col];
+          if (code) {
+            const img = document.createElement("img");
+            img.classList.add("piece");
+            img.src = pieceImages[code];
+            img.draggable = false;
+            const squareDiv = getSquareDiv(row, col);
+            squareDiv.appendChild(img);
+          }
+        }
+      }
+    }
+    function updateHighlights() {
+      document.querySelectorAll(".selected, .highlight").forEach(el => {
+        el.classList.remove("selected", "highlight");
+      });
+      if (selectedSquare) {
+        const { row, col } = selectedSquare;
+        getSquareDiv(row, col).classList.add("selected");
+        for (const mv of validMoves) {
+          getSquareDiv(mv.row, mv.col).classList.add("highlight");
+        }
+      }
+    }
+    function getLegalMoves(r, c) {
+      const code = boardState[r][c];
+      if (!code) return [];
+      const side = isWhitePiece(code) ? "white" : "black";
+      if (side !== turn) return [];
+      const p = code[1];
+      let moves = [];
 
-// Add to wishlist and cart functions
-async function addToWishlist(bookId) {
-  if (!currentUser) {
-    showToast("Please login to add wishlist");
-    return;
-  }
-  try {
-    await db.ref(`wishlist/${currentUser.uid}/${bookId}`).set(true);
-    showToast("Added to wishlist");
-  } catch (err) {
-    showToast("Error adding to wishlist: " + err.message);
-  }
-}
-async function addToCart(bookId) {
-  if (!currentUser) {
-    showToast("Please login to add cart");
-    return;
-  }
-  try {
-    await db.ref(`cart/${currentUser.uid}/${bookId}`).set(true);
-    showToast("Added to cart");
-  } catch (err) {
-    showToast("Error adding to cart: " + err.message);
-  }
-}
+      switch (p) {
+        case "P": {
+          const dir = side === "white" ? -1 : 1;
+          const startRow = side === "white" ? 6 : 1;
+          let r2 = r + dir;
+          if (r2 >= 0 && r2 < 8 && !boardState[r2][c]) {
+            moves.push({ row: r2, col: c });
+            if (r === startRow && !boardState[r + 2 * dir][c]) {
+              moves.push({ row: r + 2 * dir, col: c, doubleStep: true });
+            }
+          }
+          for (const dc of [-1, 1]) {
+            const c2 = c + dc;
+            if (c2 >= 0 && c2 < 8) {
+              if (r2 >= 0 && r2 < 8 && boardState[r2][c2] && boardState[r2][c2][0] !== code[0]) {
+                moves.push({ row: r2, col: c2, capture: true });
+              }
+              if (enPassantTarget && enPassantTarget.row === r && enPassantTarget.col === c2) {
+                moves.push({ row: r2, col: c2, enPassant: true });
+              }
+            }
+          }
+          break;
+        }
+        case "N": {
+          const knightDeltas = [
+            { dr: -2, dc: -1 }, { dr: -2, dc: 1 }, { dr: -1, dc: -2 }, { dr: -1, dc: 2 },
+            { dr: 1, dc: -2 }, { dr: 1, dc: 2 }, { dr: 2, dc: -1 }, { dr: 2, dc: 1 }
+          ];
+          for (const d of knightDeltas) {
+            const r2 = r + d.dr, c2 = c + d.dc;
+            if (r2 >= 0 && r2 < 8 && c2 >= 0 && c2 < 8) {
+              if (!boardState[r2][c2] || boardState[r2][c2][0] !== code[0]) {
+                moves.push({ row: r2, col: c2 });
+              }
+            }
+          }
+          break;
+        }
+        case "B":
+        case "R":
+        case "Q": {
+          const directions = [];
+          if (p === "B" || p === "Q") {
+            directions.push({ dr: -1, dc: -1 }, { dr: -1, dc: 1 }, { dr: 1, dc: -1 }, { dr: 1, dc: 1 });
+          }
+          if (p === "R" || p === "Q") {
+            directions.push({ dr: -1, dc:  0 }, { dr: 1, dc:  0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 });
+          }
+          for (const d of directions) {
+            let r2 = r + d.dr, c2 = c + d.dc;
+            while (r2 >= 0 && r2 < 8 && c2 >= 0 && c2 < 8) {
+              if (!boardState[r2][c2]) {
+                moves.push({ row: r2, col: c2 });
+              } else {
+                if (boardState[r2][c2][0] !== code[0]) {
+                  moves.push({ row: r2, col: c2, capture: true });
+                }
+                break;
+              }
+              r2 += d.dr;
+              c2 += d.dc;
+            }
+          }
+          break;
+        }
+        case "K": {
+          const kingDeltas = [
+            { dr: -1, dc: -1 }, { dr: -1, dc: 0 }, { dr: -1, dc: 1 },
+            { dr: 0, dc: -1 },                 { dr: 0, dc: 1 },
+            { dr: 1, dc: -1 },  { dr: 1, dc: 0 },  { dr: 1, dc: 1 }
+          ];
+          for (const d of kingDeltas) {
+            const r2 = r + d.dr, c2 = c + d.dc;
+            if (r2 >= 0 && r2 < 8 && c2 >= 0 && c2 < 8) {
+              if (!boardState[r2][c2] || boardState[r2][c2][0] !== code[0]) {
+                moves.push({ row: r2, col: c2 });
+              }
+            }
+          }
+          const rank = code[0] === "w" ? 7 : 0;
+          if (r === rank && c === 4) {
+            // King side castling
+            if ((code[0] === "w" ? castlingRights.wK : castlingRights.bK)) {
+              if (
+                boardState[rank][5] === "" &&
+                boardState[rank][6] === "" &&
+                !isSquareAttacked(turn, rank, 4) &&
+                !isSquareAttacked(turn, rank, 5) &&
+                !isSquareAttacked(turn, rank, 6)
+              ) {
+                const rookCode = boardState[rank][7];
+                if (rookCode === code[0] + "R" && (code[0] === "w" ? castlingRights.wK : castlingRights.bK)) {
+                  moves.push({ row: rank, col: 6, castling: "king" });
+                }
+              }
+            }
+            // Queen side castling
+            if ((code[0] === "w" ? castlingRights.wQ : castlingRights.bQ)) {
+              if (
+                boardState[rank][3] === "" &&
+                boardState[rank][2] === "" &&
+                boardState[rank][1] === "" &&
+                !isSquareAttacked(turn, rank, 4) &&
+                !isSquareAttacked(turn, rank, 3) &&
+                !isSquareAttacked(turn, rank, 2)
+              ) {
+                const rookCode = boardState[rank][0];
+                if (rookCode === code[0] + "R") {
+                  moves.push({ row: rank, col: 2, castling: "queen" });
+                }
+              }
+            }
+          }
+          break;
+        }
+      }
+      // Filter moves that leave king in check
+      const legal = [];
+      for (const mv of moves) {
+        const backupFrom = boardState[r][c];
+        const backupTo = boardState[mv.row][mv.col];
+        const enPassantBackup = enPassantTarget;
+        boardState[r][c] = "";
+        if (mv.enPassant) {
+          const capRow = r;
+          boardState[capRow][mv.col] = "";
+        }
+        boardState[mv.row][mv.col] = backupFrom;
+
+        let rookBackup = null;
+        if (mv.castling === "king") {
+          const rookCol = 7;
+          rookBackup = boardState[r][rookCol];
+          boardState[r][rookCol] = "";
+          boardState[r][5] = backupFrom[0] + "R";
+        } else if (mv.castling === "queen") {
+          const rookCol = 0;
+          rookBackup = boardState[r][rookCol];
+          boardState[r][rookCol] = "";
+          boardState[r][3] = backupFrom[0] + "R";
+        }
+
+        const inCheck = isInCheck(side);
+
+        boardState[r][c] = backupFrom;
+        boardState[mv.row][mv.col] = backupTo;
+        if (mv.enPassant) {
+          const capRow = r;
+          boardState[capRow][mv.col] = backupTo;
+        }
+        if (mv.castling === "king") {
+          boardState[r][7] = rookBackup;
+          boardState[r][5] = "";
+        } else if (mv.castling === "queen") {
+          boardState[r][0] = rookBackup;
+          boardState[r][3] = "";
+        }
+        enPassantTarget = enPassantBackup;
+
+        if (!inCheck) {
+          legal.push(mv);
+        }
+      }
+      return legal;
+    }
+    function makeMove(from, to, moveMeta) {
+      if (!isMyTurn || winner) return;
+      let origFrom = boardState[from.row][from.col];
+      let origTo = boardState[to.row][to.col];
+      let newBoard = JSON.parse(JSON.stringify(boardState));
+      newBoard[from.row][from.col] = "";
+      if (moveMeta && moveMeta.enPassant) {
+        let capRow = from.row;
+        newBoard[capRow][to.col] = "";
+      }
+      newBoard[to.row][to.col] = origFrom;
+      let newCastling = Object.assign({}, castlingRights);
+      let newEnPassant = null;
+      if (moveMeta && moveMeta.castling) {
+        const rank = origFrom[0] === "w" ? 7 : 0;
+        if (moveMeta.castling === "king") {
+          newBoard[rank][7] = "";
+          newBoard[rank][5] = origFrom[0] + "R";
+        } else {
+          newBoard[rank][0] = "";
+          newBoard[rank][3] = origFrom[0] + "R";
+        }
+      }
+      if (moveMeta && moveMeta.promotion) {
+        newBoard[to.row][to.col] = origFrom[0]+"Q";
+      }
+      if (origFrom === "wK") {
+        newCastling.wK = newCastling.wQ = false;
+      }
+      if (origFrom === "bK") {
+        newCastling.bK = newCastling.bQ = false;
+      }
+      if (origFrom === "wR") {
+        if (from.row === 7 && from.col === 0) newCastling.wQ = false;
+        if (from.row === 7 && from.col === 7) newCastling.wK = false;
+      }
+      if (origFrom === "bR") {
+        if (from.row === 0 && from.col === 0) newCastling.bQ = false;
+        if (from.row === 0 && from.col === 7) newCastling.bK = false;
+      }
+      if (origFrom[1] === "P" && Math.abs(to.row - from.row) === 2) {
+        newEnPassant = { row: (from.row + to.row)/2, col: from.col };
+      }
+      // Time update
+      let update = {
+        board: newBoard,
+        turn: opponent(turn),
+        castling: newCastling,
+        enPassant: newEnPassant,
+        whiteTime: whiteTime,
+        blackTime: blackTime
+      };
+      // Win/lose/stalemate check (for next player)
+      let afterMoveBoard = newBoard;
+      let afterMoveTurn = opponent(turn);
+      // Checkmate or stalemate?
+      let legalExists = false, isCheck = isInCheck(afterMoveTurn);
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const code = afterMoveBoard[r][c];
+          if (!code) continue;
+          if ((afterMoveTurn === "white" && code[0]==="w") || (afterMoveTurn==="black"&&code[0]==="b")) {
+            let moves = getLegalMoves_on_board(afterMoveBoard, afterMoveTurn, r, c, newCastling, newEnPassant);
+            if (moves.length>0) { legalExists=true; break; }
+          }
+        }
+        if (legalExists) break;
+      }
+      if (!legalExists) {
+        if (isCheck) {
+          // Win for me
+          declareWinner(mySide, "checkmate");
+        } else {
+          endGameByStalemate();
+        }
+      }
+      gameRef.update(update);
+    }
+    // Helper for checkmate/stalemate detection
+    function getLegalMoves_on_board(board, side, r, c, castling, enPassant) {
+      const code = board[r][c];
+      if (!code) return [];
+      if ((side==="white"&&code[0]!=="w")||(side==="black"&&code[0]!=="b")) return [];
+      const p = code[1];
+      let moves = [];
+      function isAttacked(row, col) {
+        let origBoard = boardState;
+        boardState = board;
+        let attacked = isSquareAttacked(side, row, col);
+        boardState = origBoard;
+        return attacked;
+      }
+      switch (p) {
+        case "P": {
+          const dir = side === "white" ? -1 : 1;
+          const startRow = side === "white" ? 6 : 1;
+          let r2 = r + dir;
+          if (r2 >= 0 && r2 < 8 && !board[r2][c]) {
+            moves.push({ row: r2, col: c });
+            if (r === startRow && !board[r + 2 * dir][c]) {
+              moves.push({ row: r + 2 * dir, col: c, doubleStep: true });
+            }
+          }
+          for (const dc of [-1, 1]) {
+            const c2 = c + dc;
+            if (c2 >= 0 && c2 < 8) {
+              if (r2 >= 0 && r2 < 8 && board[r2][c2] && board[r2][c2][0] !== code[0]) {
+                moves.push({ row: r2, col: c2, capture: true });
+              }
+              if (enPassant && enPassant.row === r && enPassant.col === c2) {
+                moves.push({ row: r2, col: c2, enPassant: true });
+              }
+            }
+          }
+          break;
+        }
+        case "N": {
+          const knightDeltas = [
+            { dr: -2, dc: -1 }, { dr: -2, dc: 1 }, { dr: -1, dc: -2 }, { dr: -1, dc: 2 },
+            { dr: 1, dc: -2 }, { dr: 1, dc: 2 }, { dr: 2, dc: -1 }, { dr: 2, dc: 1 }
+          ];
+          for (const d of knightDeltas) {
+            const r2 = r + d.dr, c2 = c + d.dc;
+            if (r2 >= 0 && r2 < 8 && c2 >= 0 && c2 < 8) {
+              if (!board[r2][c2] || board[r2][c2][0] !== code[0]) {
+                moves.push({ row: r2, col: c2 });
+              }
+            }
+          }
+          break;
+        }
+        case "B":
+        case "R":
+        case "Q": {
+          const directions = [];
+          if (p === "B" || p === "Q") {
+            directions.push({ dr: -1, dc: -1 }, { dr: -1, dc: 1 }, { dr: 1, dc: -1 }, { dr: 1, dc: 1 });
+          }
+          if (p === "R" || p === "Q") {
+            directions.push({ dr: -1, dc:  0 }, { dr: 1, dc:  0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 });
+          }
+          for (const d of directions) {
+            let r2 = r + d.dr, c2 = c + d.dc;
+            while (r2 >= 0 && r2 < 8 && c2 >= 0 && c2 < 8) {
+              if (!board[r2][c2]) {
+                moves.push({ row: r2, col: c2 });
+              } else {
+                if (board[r2][c2][0] !== code[0]) {
+                  moves.push({ row: r2, col: c2, capture: true });
+                }
+                break;
+              }
+              r2 += d.dr;
+              c2 += d.dc;
+            }
+          }
+          break;
+        }
+        case "K": {
+          const kingDeltas = [
+            { dr: -1, dc: -1 }, { dr: -1, dc: 0 }, { dr: -1, dc: 1 },
+            { dr: 0, dc: -1 },                 { dr: 0, dc: 1 },
+            { dr: 1, dc: -1 },  { dr: 1, dc: 0 },  { dr: 1, dc: 1 }
+          ];
+          for (const d of kingDeltas) {
+            const r2 = r + d.dr, c2 = c + d.dc;
+            if (r2 >= 0 && r2 < 8 && c2 >= 0 && c2 < 8) {
+              if (!board[r2][c2] || board[r2][c2][0] !== code[0]) {
+                moves.push({ row: r2, col: c2 });
+              }
+            }
+          }
+          // Castling (skip for simplicity in stalemate check)
+          break;
+        }
+      }
+      // Filter those not leaving king in check
+      let legal = [];
+      for (const mv of moves) {
+        let bcopy = JSON.parse(JSON.stringify(board));
+        bcopy[r][c]="";
+        bcopy[mv.row][mv.col]=code;
+        let king = findKing_on_board(side,bcopy);
+        if (!king) continue;
+        if (!isAttacked(king.row, king.col)) legal.push(mv);
+      }
+      return legal;
+    }
+    function findKing_on_board(side, board) {
+      const target = (side === "white" ? "wK" : "bK");
+      for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (board[r][c]===target) return {row:r,col:c};
+      return null;
+    }
+    function onSquareClick(r, c) {
+      if (!isMyTurn || winner) return;
+      const code = boardState[r][c];
+      if (selectedSquare) {
+        const isSame = selectedSquare.row === r && selectedSquare.col === c;
+        if (isSame) {
+          selectedSquare = null;
+          validMoves = [];
+          updateHighlights();
+          return;
+        }
+        const move = validMoves.find(m => m.row === r && m.col === c);
+        if (move) {
+          // Pawn promotion
+          let isPromotion = (boardState[selectedSquare.row][selectedSquare.col][1]==="P") &&
+            ((mySide==="white"&&move.row===0)||(mySide==="black"&&move.row===7));
+          makeMove(selectedSquare, { row: r, col: c }, {...move, promotion: isPromotion});
+          selectedSquare = null;
+          validMoves = [];
+          updateHighlights();
+          return;
+        } else {
+          if ((mySide === "white" && isWhitePiece(code)) || (mySide === "black" && isBlackPiece(code))) {
+            selectedSquare = { row: r, col: c };
+            validMoves = getLegalMoves(r, c);
+            updateHighlights();
+            return;
+          }
+        }
+      } else {
+        if ((mySide === "white" && isWhitePiece(code)) || (mySide === "black" && isBlackPiece(code))) {
+          selectedSquare = { row: r, col: c };
+          validMoves = getLegalMoves(r, c);
+          updateHighlights();
+          return;
+        }
+      }
+    }
+    // ========== MODAL BUTTON ==========
+    modalRestartBtn.onclick = resetGameAll;
   </script>
-  <!-- Firebase storage SDK for file upload -->
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 </body>
-</html>
+      </html>
