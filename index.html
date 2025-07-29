@@ -5,51 +5,35 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Online Multiplayer Chess</title>
   <style>
-    body {
-      background-color: #222;
-      color: white;
-      font-family: sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      min-height: 100vh;
-      padding: 1rem;
-      position: relative;
-    }
-    h1 {margin-bottom: 1rem;font-size: 1.5rem;text-align: center;}
-    .captured {display: flex;flex-wrap: wrap;justify-content: center;align-items: center;min-height: 2rem;margin: 0.5rem 0;gap: 0.25rem;}
-    .captured img {width: 2rem; height: 2rem;}
-    .clock-container {width: 100%;max-width: 480px;display: flex;justify-content: center;margin: 0.25rem 0;}
-    .clock {width: 100%;max-width: 200px;padding: 0.5rem 1rem;text-align: center;border: 2px solid white;border-radius: 4px;font-family: monospace;background-color: #333;color: #eee;font-size: 1rem;margin: 30px 0 30px 0;}
-    .active-clock {background-color: white;color: black;font-size: 1.5rem;border-color: #fff;}
-    .inactive-clock {background-color: #333;color: #aaa;font-size: 1rem;border-color: #555;}
-    #board-container {width: 100%;max-width: 480px;aspect-ratio: 1;border: 2px solid white;display: grid;grid-template-columns: repeat(8, 1fr);grid-template-rows: repeat(8, 1fr);}
-    .square {position: relative;width: 100%;height: 100%;display: flex;align-items: center;justify-content: center;font-size: 0;cursor: pointer;}
-    .square[data-col="0"].light { background-color: #f0d9b5; } .square[data-col="0"].dark  { background-color: #b58863; }
-    .square[data-col="1"].light { background-color: #f0d9b5; } .square[data-col="1"].dark  { background-color: #b58863; }
-    .square[data-col="2"].light { background-color: #f0d9b5; } .square[data-col="2"].dark  { background-color: #b58863; }
-    .square[data-col="3"].light { background-color: #f0d9b5; } .square[data-col="3"].dark  { background-color: #b58863; }
-    .square[data-col="4"].light { background-color: #f0d9b5; } .square[data-col="4"].dark  { background-color: #b58863; }
-    .square[data-col="5"].light { background-color: #f0d9b5; } .square[data-col="5"].dark  { background-color: #b58863; }
-    .square[data-col="6"].light { background-color: #f0d9b5; } .square[data-col="6"].dark  { background-color: #b58863; }
-    .square[data-col="7"].light { background-color: #f0d9b5; } .square[data-col="7"].dark  { background-color: #b58863; }
-    .selected {outline: 3px solid yellow;}
-    .highlight {background-color: rgba(255, 255, 0, 0.4);}
-    img.piece {width: 90%;height: 90%;user-select: none;-webkit-user-drag: none;}
-    #winner-modal {position: fixed;top: 0;left: 0;width: 100%;height: 100%;background-color: rgba(0,0,0,0.8);display: none;align-items: center;justify-content: center;z-index: 1000;}
-    #winner-modal .modal-content {background-color: #111;padding: 2rem;border: 2px solid white;border-radius: 8px;text-align: center;max-width: 80%;color: #4d94ff;}
-    #winner-modal .modal-content h2 {margin-bottom: 1rem;font-size: 2rem;color: #ff4d4d;}
-    #winner-modal .modal-content button {margin-top: 1rem;padding: 0.5rem 1rem;font-size: 1rem;background-color: #fff;color: #000;border: none;border-radius: 4px;cursor: pointer;}
-    #winner-modal .modal-content button:hover {background-color: #ddd;}
-    #home-screen {position: fixed;top: 0; left: 0;width: 100vw; height: 100vh;background: #111;display: flex;flex-direction: column;align-items: center;justify-content: center;z-index: 10000;}
-    #home-screen h1 {font-size: 2.2rem;margin-bottom: 2rem;}
-    #home-screen button {background: #fff;color: #222;font-size: 1.1rem;padding: 0.7rem 2.5rem;border-radius: 6px;border: none;cursor: pointer;margin-top: 1rem;font-weight: bold;min-width: 130px;}
-    #home-screen button:disabled {background: #aaa;color: #444;cursor: not-allowed;}
-    #waiting-message {margin-top: 2rem;font-size: 1.2rem;color: #4d94ff;}
-    #info-bar {margin: 0.7rem 0;font-size: 1rem;color: #4d94ff;text-align: center;width: 100%;}
-    #user-bar {margin: 0.7rem 0;font-size: 1rem;color: #ffe04d;text-align: center;width: 100%;display: flex;justify-content: space-between;align-items: center;}
-    #user-bar span {display: flex;align-items: center;}
-    #user-bar img {width: 1.8em;height: 1.8em;border-radius: 50%;margin-right: 0.5em;}
+    body {background:#222; color:white; font-family:sans-serif; display:flex; flex-direction:column; align-items:center; min-height:100vh; padding:1rem;}
+    h1 {margin-bottom:1rem; font-size:1.5rem; text-align:center;}
+    .captured {display:flex; flex-wrap:wrap; justify-content:center; align-items:center; min-height:2rem; margin:0.5rem 0; gap:0.25rem;}
+    .captured img {width:2rem; height:2rem;}
+    .clock-container {width:100%; max-width:480px; display:flex; justify-content:center; margin:0.25rem 0;}
+    .clock {width:100%; max-width:200px; padding:0.5rem 1rem; text-align:center; border:2px solid white; border-radius:4px; font-family:monospace; background:#333; color:#eee; font-size:1rem;margin:30px 0 30px 0;}
+    .active-clock {background:white; color:black; font-size:1.5rem; border-color:#fff;}
+    .inactive-clock {background:#333; color:#aaa; font-size:1rem; border-color:#555;}
+    #board-container {width:100%; max-width:480px; aspect-ratio:1; border:2px solid white; display:grid; grid-template-columns:repeat(8,1fr); grid-template-rows:repeat(8,1fr);}
+    .square {position:relative; width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-size:0; cursor:pointer;}
+    .square[data-col="0"].light, .square[data-col="1"].light, .square[data-col="2"].light, .square[data-col="3"].light, .square[data-col="4"].light, .square[data-col="5"].light, .square[data-col="6"].light, .square[data-col="7"].light {background:#f0d9b5;}
+    .square[data-col="0"].dark,  .square[data-col="1"].dark,  .square[data-col="2"].dark,  .square[data-col="3"].dark,  .square[data-col="4"].dark,  .square[data-col="5"].dark,  .square[data-col="6"].dark,  .square[data-col="7"].dark  {background:#b58863;}
+    .selected {outline:3px solid yellow;}
+    .highlight {background:rgba(255,255,0,0.4);}
+    img.piece {width:90%; height:90%; user-select:none; -webkit-user-drag:none;}
+    #winner-modal {position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); display:none; align-items:center; justify-content:center; z-index:1000;}
+    #winner-modal .modal-content {background:#111; padding:2rem; border:2px solid white; border-radius:8px; text-align:center; max-width:80%; color:#4d94ff;}
+    #winner-modal .modal-content h2 {margin-bottom:1rem; font-size:2rem; color:#ff4d4d;}
+    #winner-modal .modal-content button {margin-top:1rem; padding:0.5rem 1rem; font-size:1rem; background:#fff; color:#000; border:none; border-radius:4px; cursor:pointer;}
+    #winner-modal .modal-content button:hover {background:#ddd;}
+    #home-screen {position:fixed; top:0; left:0; width:100vw; height:100vh; background:#111; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:10000;}
+    #home-screen h1 {font-size:2.2rem; margin-bottom:2rem;}
+    #home-screen button {background:#fff; color:#222; font-size:1.1rem; padding:0.7rem 2.5rem; border-radius:6px; border:none; cursor:pointer; margin-top:1rem; font-weight:bold; min-width:130px;}
+    #home-screen button:disabled {background:#aaa; color:#444; cursor:not-allowed;}
+    #waiting-message {margin-top:2rem; font-size:1.2rem; color:#4d94ff;}
+    #info-bar {margin:0.7rem 0; font-size:1rem; color:#4d94ff; text-align:center; width:100%;}
+    #user-bar {margin:0.7rem 0; font-size:1rem; color:#ffe04d; text-align:center; width:100%; display:flex; justify-content:space-between; align-items:center;}
+    #user-bar span {display:flex; align-items:center;}
+    #user-bar img {width:1.8em; height:1.8em; border-radius:50%; margin-right:0.5em;}
   </style>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
@@ -84,15 +68,14 @@
     </div>
   </div>
 <script>
-const firebaseConfig = {
-  apiKey: "AIzaSyD8z3e5j9y48wJkyU89F7M19cDfxQ4P8uo",
-  authDomain: "chess-online-ebc1f.firebaseapp.com",
-  databaseURL: "https://chess-online-ebc1f-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "chess-online-ebc1f",
-  storageBucket: "chess-online-ebc1f.firebasestorage.app",
-  messagingSenderId: "825068912703",
-  appId: "1:825068912703:web:48330509c612b8b4cdf88a"
-};
+const firebaseConfig = { 
+  apiKey: "AIzaSyD8z3e5j9y48wJkyU89F7M19cDfxQ4P8uo", 
+    authDomain: "chess-online-ebc1f.firebaseapp.com",
+databaseURL: "https://chess-online-ebc1f-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "chess-online-ebc1f",                                                                                                            
+  storageBucket: "chess-online-ebc1f.firebasestorage.app", 
+                        messagingSenderId: "825068912703",
+                        appId: "1:825068912703:web:48330509c612b8b4cdf88a" };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 const auth = firebase.auth();
@@ -135,11 +118,10 @@ let playerInfo = {white: null, black: null};
 let waitingListener = null;
 let matchupListener = null;
 
-// --------- AUTH + UI ---------
-function updateUIForUser(user) {
-  if (user) {
+function updateUIForUser(u) {
+  if (u) {
     signedInUserDiv.style.display = "";
-    signedInUserDiv.innerHTML = <img src="${user.photoURL}" style="width:2em;height:2em;border-radius:1em;margin-right:0.5em;vertical-align:middle;">${user.displayName};
+    signedInUserDiv.innerHTML = <img src="${u.photoURL}" style="width:2em;height:2em;border-radius:1em;margin-right:0.5em;vertical-align:middle;">${u.displayName};
     playBtn.style.display = "";
     googleSignInBtn.style.display = "none";
   } else {
@@ -149,7 +131,7 @@ function updateUIForUser(user) {
   }
 }
 googleSignInBtn.onclick = function() {
-  var provider = new firebase.auth.GoogleAuthProvider();
+  const provider = new firebase.auth.GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
   auth.signInWithPopup(provider).then((result) => {
     user = result.user;
@@ -163,23 +145,17 @@ auth.onAuthStateChanged(function(u) {
   updateUIForUser(user);
 });
 
-// --------- DOT-AND-BOX STYLE MATCHMAKING FOR 2 PLAYER ---------
 playBtn.onclick = async function() {
   playBtn.disabled = true;
   waitingMsg.style.display = "";
-  let matched = false;
-  let me = {
+  const me = {
     name: user.displayName,
     photo: user.photoURL,
     uid: user.uid
   };
-  // Use a "waiting" node for chess
-  let waitingRef = db.ref("chess-matches-waiting/2");
-  // Remove my previous waiting (if any)
+  const waitingRef = db.ref("chess-matches-waiting/2");
   await waitingRef.child(me.uid).remove();
-
-  // Try to find any other waiting user (excluding me)
-  let snapshot = await waitingRef.once("value");
+  const snapshot = await waitingRef.once("value");
   let foundKey = null, foundVal = null;
   snapshot.forEach(child => {
     if (child.key !== me.uid) {
@@ -188,11 +164,9 @@ playBtn.onclick = async function() {
       return true;
     }
   });
-
   if (foundKey) {
-    // There is another player waiting, create a match!
-    let opp = foundVal;
-    let matchObj = {
+    const opp = foundVal;
+    const matchObj = {
       board: [
         ["bR","bN","bB","bQ","bK","bB","bN","bR"],
         ["bP","bP","bP","bP","bP","bP","bP","bP"],
@@ -211,38 +185,30 @@ playBtn.onclick = async function() {
       moves: [],
       status: "playing",
       winner: null,
-      playerWhite: opp, // The older/waiting user gets white, new user gets black
+      playerWhite: opp,
       playerBlack: me
     };
-    let matchRef = db.ref("chess-matches").push();
+    const matchRef = db.ref("chess-matches").push();
     gameId = matchRef.key;
     await matchRef.set(matchObj);
-    // Remove both waitings
     await waitingRef.child(opp.uid).remove();
     await waitingRef.child(me.uid).remove();
-    // Notify both
     await db.ref("chess-matches-active/"+opp.uid).set({match: gameId, color: "white"});
     await db.ref("chess-matches-active/"+me.uid).set({match: gameId, color: "black"});
-    // Start game for this user
     launchGame("black", gameId, matchObj);
   } else {
-    // No one waiting, so become waiting
     await waitingRef.child(me.uid).set(me);
     waitingMsg.innerText = "Waiting for another player...";
-    // Listen for match notification for this user
     if (waitingListener) waitingListener.off();
     waitingListener = db.ref("chess-matches-active/"+me.uid);
     waitingListener.on("value", async (snap) => {
-      let val = snap.val();
+      const val = snap.val();
       if (!val) return;
       gameId = val.match;
-      let color = val.color;
-      // Now remove myself from waiting (someone else created match)
+      const color = val.color;
       await waitingRef.child(me.uid).remove();
-      // Load match data
-      let matchObj = (await db.ref("chess-matches/"+gameId).once("value")).val();
+      const matchObj = (await db.ref("chess-matches/"+gameId).once("value")).val();
       launchGame(color, gameId, matchObj);
-      // Remove listener so it doesn't fire multiple times
       waitingListener.off();
     });
   }
@@ -287,7 +253,7 @@ function listenForGameUpdates() {
   if (matchupListener) matchupListener.off();
   matchupListener = db.ref("chess-matches/"+gameId);
   matchupListener.on("value", snap=>{
-    let val = snap.val();
+    const val = snap.val();
     if (!val) return;
     if (val.winner && !winner) {
       winner = val.winner;
@@ -327,7 +293,7 @@ function listenForGameUpdates() {
   });
 }
 
-// ==== Chess Logic: unchanged, full ====
+// ==== Chess Logic (unchanged, ES6)
 const pieceImages = {
   wP: "pieces/wP.svg", wR: "pieces/wR.svg", wN: "pieces/wN.svg", wB: "pieces/wB.svg", wQ: "pieces/wQ.svg", wK: "pieces/wK.svg",
   bP: "pieces/bP.svg", bR: "pieces/bR.svg", bN: "pieces/bN.svg", bB: "pieces/bB.svg", bQ: "pieces/bQ.svg", bK: "pieces/bK.svg"
@@ -455,12 +421,12 @@ function isInCheck(side) {
 function getSquareDiv(row, col) {return document.querySelector(.square[data-row="${row}"][data-col="${col}"]);}
 function createBoardDOM() {
   boardContainer.innerHTML = "";
-  let rows = mySide==="black" ? [...Array(8).keys()].reverse() : [...Array(8).keys()];
-  let cols = mySide==="black" ? [...Array(8).keys()].reverse() : [...Array(8).keys()];
+  const rows = mySide==="black" ? [...Array(8).keys()].reverse() : [...Array(8).keys()];
+  const cols = mySide==="black" ? [...Array(8).keys()].reverse() : [...Array(8).keys()];
   for (let ri = 0; ri < 8; ri++) {
     for (let ci = 0; ci < 8; ci++) {
-      let row = rows[ri];
-      let col = cols[ci];
+      const row = rows[ri];
+      const col = cols[ci];
       const sq = document.createElement("div");
       sq.classList.add("square",((row + col) % 2 === 0) ? "light" : "dark");
       sq.dataset.row = row;
@@ -666,16 +632,16 @@ function getLegalMoves(r, c) {
 }
 function makeMove(from, to, moveMeta) {
   if (!isMyTurn || winner) return;
-  let origFrom = boardState[from.row][from.col];
-  let origTo = boardState[to.row][to.col];
-  let newBoard = JSON.parse(JSON.stringify(boardState));
+  const origFrom = boardState[from.row][from.col];
+  const origTo = boardState[to.row][to.col];
+  const newBoard = JSON.parse(JSON.stringify(boardState));
   newBoard[from.row][from.col] = "";
   if (moveMeta && moveMeta.enPassant) {
-    let capRow = from.row;
+    const capRow = from.row;
     newBoard[capRow][to.col] = "";
   }
   newBoard[to.row][to.col] = origFrom;
-  let newCastling = Object.assign({}, castlingRights);
+  const newCastling = Object.assign({}, castlingRights);
   let newEnPassant = null;
   if (moveMeta && moveMeta.castling) {
     const rank = origFrom[0] === "w" ? 7 : 0;
@@ -707,7 +673,7 @@ function makeMove(from, to, moveMeta) {
   if (origFrom[1] === "P" && Math.abs(to.row - from.row) === 2) {
     newEnPassant = { row: (from.row + to.row)/2, col: from.col };
   }
-  let update = {
+  const update = {
     board: newBoard,
     turn: opponent(turn),
     castling: newCastling,
@@ -723,7 +689,7 @@ function makeMove(from, to, moveMeta) {
       const code = afterMoveBoard[r][c];
       if (!code) continue;
       if ((afterMoveTurn === "white" && code[0]==="w") || (afterMoveTurn==="black"&&code[0]==="b")) {
-        let moves = getLegalMoves_on_board(afterMoveBoard, afterMoveTurn, r, c, newCastling, newEnPassant);
+        const moves = getLegalMoves_on_board(afterMoveBoard, afterMoveTurn, r, c, newCastling, newEnPassant);
         if (moves.length>0) { legalExists=true; break; }
       }
     }
@@ -863,7 +829,7 @@ function onSquareClick(r, c) {
     }
     const move = validMoves.find(m => m.row === r && m.col === c);
     if (move) {
-      let isPromotion = (boardState[selectedSquare.row][selectedSquare.col][1]==="P") &&
+      const isPromotion = (boardState[selectedSquare.row][selectedSquare.col][1]==="P") &&
         ((mySide==="white"&&move.row===0)||(mySide==="black"&&move.row===7));
       makeMove(selectedSquare, { row: r, col: c }, {...move, promotion: isPromotion});
       selectedSquare = null;
