@@ -274,77 +274,69 @@ const firebaseConfig = {
     const googleSignInBtn = document.getElementById("google-signin-btn");
     const playBtn = document.getElementById("play-btn");
     // 1) global এ
-// ====== Globals ======
 const waitingRef = db.ref("chess-waiting-room");
-let matched = false;
+let myWaitingKey = null;
 
-// ====== On Play ======
+// 2) playBtn.onclick কে এভাবে প্রতিস্থাপন করুন
 playBtn.onclick = () => {
   playBtn.disabled = true;
   waitingMsg.style.display = "";
 
   // নিজেকে waiting-room এ যোগ
-  const meRef = waitingRef.push({
-    uid:   user.uid,
-    name:  user.displayName,
+  const newRef = waitingRef.push({
+    uid: user.uid,
+    name: user.displayName,
     photo: user.photoURL,
-    time:  firebase.database.ServerValue.TIMESTAMP
+    timestamp: firebase.database.ServerValue.TIMESTAMP
   });
+  myWaitingKey = newRef.key;
 
-  // listener: waiting-room এর সম্পূর্ণ ভ্যালু নিয়ে কাজ
-  waitingRef.on("value", snap => {
-    if (matched) return;           // যদি ইতিমধ্যেই ম্যাচ বানানো হয়ে গিয়েছিল, আর কিছু না করো
-    const data = snap.val() || {};
-    const keys = Object.keys(data);
+  // অন্য কেউ এলে ম্যাচ শুরু
+  waitingRef.on("child_added", snap => {
+    const val = snap.val();
+    const key = snap.key;
+    // যদি এটা অন্য কারো এন্ট্রি হয়
+    if (key !== myWaitingKey) {
+      waitingRef.off();                           // লিসেন বন্ধ
+      waitingRef.child(myWaitingKey).remove();    // আমার এন্ট্রি মুছে ফেলি
+      waitingRef.child(key).remove();             // তার এন্ট্রি মুছি
 
-    // যখনই waiting-room দুই বা তার বেশি entries দেখাবে:
-    if (keys.length >= 2) {
-      // প্রথম দুইটাকে পেয়ার ধরা হল
-      const [k1, k2] = keys.slice(0,2);
-      const p1 = data[k1], p2 = data[k2];
-
-      // নিশ্চিত হও current user ঐ দুইটোর একটা
-      if (![p1.uid, p2.uid].includes(user.uid)) {
-        // আপনি এখনও ওই দুই জনে‍র মধ্যে নন, তাহলে অপেক্ষা করেন
-        return;
-      }
-
-      // একবারই ম্যাচ তৈরি হবে
-      matched = true;
-      waitingRef.off();            // listener নামিয়ে দাও
-      waitingRef.child(k1).remove(); // পরিস্কার
-      waitingRef.child(k2).remove();
-
-      // খেলা শুরু—কোন প্লেয়ার বাকি? যাকে white, যাকে black?
-      const meSide    = (p1.uid === user.uid) ? "white" : "black";
-      const opp       = (meSide === "white") ? p2 : p1;
-      const matchId   = "game_" + Math.random().toString(36).substr(2,9);
+      // নতুন ম্যাচ আইডি
+      const matchId = "game_" + Math.random().toString(36).substr(2,9);
       gameId = matchId;
-      mySide = meSide;
-      isMyTurn = (meSide === "white");
 
-      const initialState = {
-        board: [...],  // আপনার ইনিশিয়াল বোর্ড অ্যারে
+      // খেলোয়াড় দুজনের ইনিশিয়াল স্টেট
+      const state = {
+        board: initialBoardArray,   // আপনার init board
         turn: "white",
-        castling: { wK:true, wQ:true, bK:true, bQ:true },
+        castling: {wK:true,wQ:true,bK:true,bQ:true},
         enPassant: null,
         whiteTime: 600,
         blackTime: 600,
         status: "playing",
         winner: null,
-        playerWhite:  (meSide==="white" ? {uid:user.uid,   name:user.displayName, photo:user.photoURL}
-                                        : {uid:opp.uid,    name:opp.name,     photo:opp.photo}),
-        playerBlack:  (meSide==="black" ? {uid:user.uid,   name:user.displayName, photo:user.photoURL}
-                                        : {uid:opp.uid,    name:opp.name,     photo:opp.photo})
+        playerWhite: {
+          uid: user.uid, 
+          name: user.displayName, 
+          photo: user.photoURL
+        },
+        playerBlack: {
+          uid: val.uid, 
+          name: val.name, 
+          photo: val.photo
+        }
       };
 
-      // রিয়েলটাইম ডেটাবেজে সেট করে গেম শুরু
-      db.ref("chess-matches/" + matchId).set(initialState)
-        .then(() => { startGame(initialState); });
+      // DB তে লিখে আইনি ভাবে ম্যাচ শুরু
+      db.ref("chess-matches/" + matchId).set(state)
+        .then(() => {
+          mySide = "white";
+          isMyTurn = true;
+          startGame(state);
+        });
     }
   });
 };
-
 
     const signedInUserDiv = document.getElementById("signedin-user");
     const waitingMsg = document.getElementById("waiting-message");
