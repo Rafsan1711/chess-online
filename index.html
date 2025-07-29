@@ -222,7 +222,6 @@
       margin-right: 0.5em;
     }
   </style>
-  <!-- Firebase scripts (no library, use CDN) -->
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
@@ -257,18 +256,18 @@
   </div>
   <script>
     // ===== FIREBASE CONFIGURATION =====
-    const firebaseConfig = {
-  apiKey: "AIzaSyDWbWkOSY5IA3LQuSjW5pFD0XQOWmK8mAE",
-  authDomain: "chess-online-ac582.firebaseapp.com",
-  databaseURL: "https://chess-online-ac582-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "chess-online-ac582",
-  storageBucket: "chess-online-ac582.firebasestorage.app",
-  messagingSenderId: "804954664189",
-  appId: "1:804954664189:web:b45d833a39337ce8a6e294"
-};
+    var firebaseConfig = {
+      apiKey: "AIzaSyD4-hVvefrYoGk5VmU4uR5Tj2lHn2Xz8sM",
+      authDomain: "dot-and-box-game.firebaseapp.com",
+      databaseURL: "https://dot-and-box-game-default-rtdb.firebaseio.com",
+      projectId: "dot-and-box-game",
+      storageBucket: "dot-and-box-game.appspot.com",
+      messagingSenderId: "127026956392",
+      appId: "1:127026956392:web:a2bd8cbb10be4b3a3b8cff"
+    };
     firebase.initializeApp(firebaseConfig);
-   const db = firebase.database();
-    const auth = firebase.auth();
+    var db = firebase.database();
+    var auth = firebase.auth();
 
     // ==== DOM refs ====
     const homeScreen = document.getElementById("home-screen");
@@ -309,7 +308,6 @@
     let gameRef = null;
     let user = null;
     let playerInfo = {white: null, black: null};
-    let myUserDbKey = null;
 
     // Piece images mapping (relative to root!)
     const pieceImages = {
@@ -342,6 +340,7 @@
     }
     googleSignInBtn.onclick = function() {
       var provider = new firebase.auth.GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' }); // Always show account chooser
       auth.signInWithPopup(provider).then((result) => {
         user = result.user;
         updateUIForUser(user);
@@ -370,14 +369,15 @@
           }
         });
         if (found) {
-          // Join as black
           joinGame(foundKey);
         } else {
-          // Create new as white
           createGame();
         }
       });
     };
+
+    // --- THE FIX: Listen for own game in waiting, and start when changed to playing ---
+    let waitingGameListener = null;
 
     function createGame() {
       let id = "game_" + Math.random().toString(36).substr(2,9);
@@ -416,17 +416,24 @@
       });
     }
     function waitForPlayer(id) {
-      db.ref("chess-matches/"+id).on("value", snap=>{
+      // Clean up previous listener if any
+      if(waitingGameListener) waitingGameListener.off();
+      waitingGameListener = db.ref("chess-matches/"+id);
+      waitingGameListener.on("value", snap=>{
         let val = snap.val();
         if (!val) return;
+        // When status changes to playing, start game
         if (val.status === "waiting") {
           waitingMsg.innerText = "Waiting for another player...";
-        } else if (val.status==="playing") {
+        }
+        if (val.status === "playing") {
           gameRef = db.ref("chess-matches/"+id);
           playerInfo.white = val.playerWhite;
           playerInfo.black = val.playerBlack;
+          // --- THE FIX: Now startGame for the waiting player ---
           startGame(val);
-          db.ref("chess-matches/"+id).off();
+          waitingMsg.style.display = "none";
+          if(waitingGameListener) waitingGameListener.off();
         }
       });
     }
@@ -439,7 +446,6 @@
         photo: user.photoURL,
         uid: user.uid
       };
-      // Mark game as started
       db.ref("chess-matches/"+id).transaction(val=>{
         if (!val || val.status !== "waiting") return;
         val.status = "playing";
@@ -476,37 +482,30 @@
       selectedSquare = null;
       validMoves = [];
       winner = null;
-      // Users
       playerInfo.white = state.playerWhite;
       playerInfo.black = state.playerBlack;
-      // Show usernames and avatars
       userWhite.innerHTML = playerInfo.white
         ? `<img src="${playerInfo.white.photo}" alt="" />${playerInfo.white.name}${mySide==='white'?' (You)':''}`
         : '';
       userBlack.innerHTML = playerInfo.black
         ? `<img src="${playerInfo.black.photo}" alt="" />${playerInfo.black.name}${mySide==='black'?' (You)':''}`
         : '';
-      // Info bar
       infoBar.innerText = "You are " + (mySide === "white" ? "White (Bottom)" : "Black (Top)");
-      // Create board
       createBoardDOM();
       renderPieces();
       updateHighlights();
       updateClocksDisplay();
       startClock();
-      // Listen for moves
       listenForGameUpdates();
     }
     function listenForGameUpdates() {
       db.ref("chess-matches/"+gameId).on("value", snap=>{
         let val = snap.val();
         if (!val) return;
-        // Game ended?
         if (val.winner && !winner) {
           winner = val.winner;
           openModal(val.winner);
         }
-        // Moves
         if (JSON.stringify(boardState)!==JSON.stringify(val.board)) {
           boardState = val.board;
           turn = val.turn;
@@ -529,7 +528,6 @@
           location.reload();
         }
         isMyTurn = (turn === mySide);
-        // Update player info (if changed)
         if (val.playerWhite && JSON.stringify(playerInfo.white)!==JSON.stringify(val.playerWhite)) {
           playerInfo.white = val.playerWhite;
           userWhite.innerHTML = playerInfo.white
@@ -544,7 +542,8 @@
         }
       });
     }
-    // ========== CHESS LOGIC & UI (AS BEFORE, WITH NETWORKING) ==========
+
+    // ========== CHESS LOGIC & UI ==========
     function formatTime(sec) {
       const m = Math.floor(sec / 60).toString().padStart(2, "0");
       const s = (sec % 60).toString().padStart(2, "0");
@@ -568,7 +567,7 @@
     function startClock() {
       clearInterval(clockInterval);
       clockInterval = setInterval(() => {
-        if (!isMyTurn) return; // Only decrease own clock
+        if (!isMyTurn) return;
         if (mySide === "white" && turn === "white") {
           whiteTime--;
           if (whiteTime <= 0) {
@@ -583,7 +582,6 @@
           }
         }
         updateClocksDisplay();
-        // Sync time to db
         if (gameRef) {
           let update = {};
           if (turn==="white") update.whiteTime = whiteTime;
@@ -601,7 +599,6 @@
       stopClock();
     }
     function declareWinner(winnerSide, how) {
-      // Only one user sets this
       if (winner) return;
       let winText = (winnerSide === "white"
         ? (playerInfo.white ? playerInfo.white.name : "White")
@@ -958,7 +955,6 @@
       if (origFrom[1] === "P" && Math.abs(to.row - from.row) === 2) {
         newEnPassant = { row: (from.row + to.row)/2, col: from.col };
       }
-      // Time update
       let update = {
         board: newBoard,
         turn: opponent(turn),
@@ -967,7 +963,6 @@
         whiteTime: whiteTime,
         blackTime: blackTime
       };
-      // Win/lose/stalemate check (for next player)
       let afterMoveBoard = newBoard;
       let afterMoveTurn = opponent(turn);
       let legalExists = false, isCheck = isInCheck(afterMoveTurn);
@@ -991,7 +986,6 @@
       }
       gameRef.update(update);
     }
-    // Helper for checkmate/stalemate detection
     function getLegalMoves_on_board(board, side, r, c, castling, enPassant) {
       const code = board[r][c];
       if (!code) return [];
@@ -1088,7 +1082,6 @@
           break;
         }
       }
-      // Filter those not leaving king in check
       let legal = [];
       for (const mv of moves) {
         let bcopy = JSON.parse(JSON.stringify(board));
