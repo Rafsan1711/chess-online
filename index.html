@@ -273,71 +273,6 @@ const firebaseConfig = {
     const homeScreen = document.getElementById("home-screen");
     const googleSignInBtn = document.getElementById("google-signin-btn");
     const playBtn = document.getElementById("play-btn");
-    // 1) global এ
-const waitingRef = db.ref("chess-waiting-room");
-let myWaitingKey = null;
-
-// 2) playBtn.onclick কে এভাবে প্রতিস্থাপন করুন
-playBtn.onclick = () => {
-  playBtn.disabled = true;
-  waitingMsg.style.display = "";
-
-  // নিজেকে waiting-room এ যোগ
-  const newRef = waitingRef.push({
-    uid: user.uid,
-    name: user.displayName,
-    photo: user.photoURL,
-    timestamp: firebase.database.ServerValue.TIMESTAMP
-  });
-  myWaitingKey = newRef.key;
-
-  // অন্য কেউ এলে ম্যাচ শুরু
-  waitingRef.on("child_added", snap => {
-    const val = snap.val();
-    const key = snap.key;
-    // যদি এটা অন্য কারো এন্ট্রি হয়
-    if (key !== myWaitingKey) {
-      waitingRef.off();                           // লিসেন বন্ধ
-      waitingRef.child(myWaitingKey).remove();    // আমার এন্ট্রি মুছে ফেলি
-      waitingRef.child(key).remove();             // তার এন্ট্রি মুছি
-
-      // নতুন ম্যাচ আইডি
-      const matchId = "game_" + Math.random().toString(36).substr(2,9);
-      gameId = matchId;
-
-      // খেলোয়াড় দুজনের ইনিশিয়াল স্টেট
-      const state = {
-        board: initialBoardArray,   // আপনার init board
-        turn: "white",
-        castling: {wK:true,wQ:true,bK:true,bQ:true},
-        enPassant: null,
-        whiteTime: 600,
-        blackTime: 600,
-        status: "playing",
-        winner: null,
-        playerWhite: {
-          uid: user.uid, 
-          name: user.displayName, 
-          photo: user.photoURL
-        },
-        playerBlack: {
-          uid: val.uid, 
-          name: val.name, 
-          photo: val.photo
-        }
-      };
-
-      // DB তে লিখে আইনি ভাবে ম্যাচ শুরু
-      db.ref("chess-matches/" + matchId).set(state)
-        .then(() => {
-          mySide = "white";
-          isMyTurn = true;
-          startGame(state);
-        });
-    }
-  });
-};
-
     const signedInUserDiv = document.getElementById("signedin-user");
     const waitingMsg = document.getElementById("waiting-message");
     const infoBar = document.getElementById("info-bar");
@@ -480,28 +415,28 @@ playBtn.onclick = () => {
         waitForPlayer(id);
       });
     }
-    // আগের waitForPlayer ফাংশন পুরোপুরি সরিয়ে দিয়ে এর জায়গায় এই কোড লিখুন
-function waitForPlayer(id) {
-  // পুরনো listener থাকলে বন্ধ করে দাও
-  if (waitingGameListener) waitingGameListener.off();
-  
-  // শুধু status এর পরিবর্তন লিসেন করবো
-  waitingGameListener = db.ref("chess-matches/" + id + "/status");
-  waitingGameListener.on("value", snap => {
-    const status = snap.val();
-    if (status === "waiting") {
-      waitingMsg.innerText = "অপর একজন খেলোয়াড়ের জন্য অপেক্ষা করা হচ্ছে...";
-    } else if (status === "playing") {
-      // status 'playing' এ এলে পুরো ম্যাচ ডেটা নিয়ে আসি
-      db.ref("chess-matches/" + id).once("value").then(fullSnap => {
-        startGame(fullSnap.val());        // ম্যাচ শুরু
-        waitingMsg.style.display = "none"; // ওয়েটিং ম্যাসেজ লুকো
-        waitingGameListener.off();        // listener বন্ধ
+    function waitForPlayer(id) {
+      // Clean up previous listener if any
+      if(waitingGameListener) waitingGameListener.off();
+      waitingGameListener = db.ref("chess-matches/"+id);
+      waitingGameListener.on("value", snap=>{
+        let val = snap.val();
+        if (!val) return;
+        // When status changes to playing, start game
+        if (val.status === "waiting") {
+          waitingMsg.innerText = "Waiting for another player...";
+        }
+        if (val.status === "playing") {
+          gameRef = db.ref("chess-matches/"+id);
+          playerInfo.white = val.playerWhite;
+          playerInfo.black = val.playerBlack;
+          // --- THE FIX: Now startGame for the waiting player ---
+          startGame(val);
+          waitingMsg.style.display = "none";
+          if(waitingGameListener) waitingGameListener.off();
+        }
       });
     }
-  });
-}
-
     function joinGame(id) {
       mySide = "black";
       isMyTurn = false;
