@@ -415,28 +415,28 @@ const firebaseConfig = {
         waitForPlayer(id);
       });
     }
-    function waitForPlayer(id) {
-      // Clean up previous listener if any
-      if(waitingGameListener) waitingGameListener.off();
-      waitingGameListener = db.ref("chess-matches/"+id);
-      waitingGameListener.on("value", snap=>{
-        let val = snap.val();
-        if (!val) return;
-        // When status changes to playing, start game
-        if (val.status === "waiting") {
-          waitingMsg.innerText = "Waiting for another player...";
-        }
-        if (val.status === "playing") {
-          gameRef = db.ref("chess-matches/"+id);
-          playerInfo.white = val.playerWhite;
-          playerInfo.black = val.playerBlack;
-          // --- THE FIX: Now startGame for the waiting player ---
-          startGame(val);
-          waitingMsg.style.display = "none";
-          if(waitingGameListener) waitingGameListener.off();
-        }
+    // আগের waitForPlayer ফাংশন পুরোপুরি সরিয়ে দিয়ে এর জায়গায় এই কোড লিখুন
+function waitForPlayer(id) {
+  // পুরনো listener থাকলে বন্ধ করে দাও
+  if (waitingGameListener) waitingGameListener.off();
+  
+  // শুধু status এর পরিবর্তন লিসেন করবো
+  waitingGameListener = db.ref("chess-matches/" + id + "/status");
+  waitingGameListener.on("value", snap => {
+    const status = snap.val();
+    if (status === "waiting") {
+      waitingMsg.innerText = "অপর একজন খেলোয়াড়ের জন্য অপেক্ষা করা হচ্ছে...";
+    } else if (status === "playing") {
+      // status 'playing' এ এলে পুরো ম্যাচ ডেটা নিয়ে আসি
+      db.ref("chess-matches/" + id).once("value").then(fullSnap => {
+        startGame(fullSnap.val());        // ম্যাচ শুরু
+        waitingMsg.style.display = "none"; // ওয়েটিং ম্যাসেজ লুকো
+        waitingGameListener.off();        // listener বন্ধ
       });
     }
+  });
+}
+
     function joinGame(id) {
       mySide = "black";
       isMyTurn = false;
