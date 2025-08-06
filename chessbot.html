@@ -1,0 +1,660 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Chess vs Bot with Minimax (No libraries)</title>
+<style>
+  body {
+    background: #222;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin:0;
+    user-select: none;
+  }
+  #board {
+    display: grid;
+    grid-template-columns: repeat(8, 70px);
+    grid-template-rows: repeat(8, 70px);
+    border: 3px solid #333;
+    box-shadow: 0 0 15px #000a;
+  }
+  .square {
+    width: 70px;
+    height: 70px;
+    position: relative;
+  }
+  .light {
+    background: #eee;
+  }
+  .dark {
+    background: #769656;
+  }
+  .square.highlight {
+    background: #f9f986 !important;
+    animation: highlightMove 0.7s ease;
+  }
+  @keyframes highlightMove {
+    0% { background: #f9f986; }
+    100% { background: #eee; }
+  }
+  img.piece {
+    width: 60px;
+    height: 60px;
+    pointer-events: none;
+    user-select: none;
+    position: absolute;
+    top: 5px; left: 5px;
+  }
+  #status {
+    position: fixed;
+    top: 10px;
+    color: white;
+    font-family: monospace;
+    font-size: 18px;
+    user-select: none;
+  }
+  button#restart {
+    margin-top: 5px;
+    padding: 8px 12px;
+    font-size: 16px;
+    cursor: pointer;
+    border-radius: 5px;
+    border: none;
+    background: #556b2f;
+    color: white;
+  }
+  button#restart:hover {
+    background: #6b8e23;
+  }
+</style>
+</head>
+<body>
+
+<div id="status">White to move</div>
+<div id="board"></div>
+<button id="restart" style="position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%)">Restart Game</button>
+
+<script>
+/* ==== Chess Game Logic + Minimax Bot ==== */
+
+const pieceToImage = {
+  "K": "https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt45.svg",
+  "Q": "https://upload.wikimedia.org/wikipedia/commons/1/15/Chess_qlt45.svg",
+  "R": "https://upload.wikimedia.org/wikipedia/commons/7/72/Chess_rlt45.svg",
+  "B": "https://upload.wikimedia.org/wikipedia/commons/b/b1/Chess_blt45.svg",
+  "N": "https://upload.wikimedia.org/wikipedia/commons/7/70/Chess_nlt45.svg",
+  "P": "https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_plt45.svg",
+
+  "k": "https://upload.wikimedia.org/wikipedia/commons/f/f0/Chess_kdt45.svg",
+  "q": "https://upload.wikimedia.org/wikipedia/commons/4/47/Chess_qdt45.svg",
+  "r": "https://upload.wikimedia.org/wikipedia/commons/f/ff/Chess_rdt45.svg",
+  "b": "https://upload.wikimedia.org/wikipedia/commons/9/98/Chess_bdt45.svg",
+  "n": "https://upload.wikimedia.org/wikipedia/commons/e/ef/Chess_ndt45.svg",
+  "p": "https://upload.wikimedia.org/wikipedia/commons/c/c7/Chess_pdt45.svg"
+};
+
+const boardDiv = document.getElementById("board");
+const statusDiv = document.getElementById("status");
+const restartBtn = document.getElementById("restart");
+
+let board = [];
+let turn = 'w'; // w or b
+let selected = null; // [row,col]
+let legalMoves = []; // moves for selected piece
+let enPassantTarget = null; // [row,col]
+let castlingRights = {wK:true, wQ:true, bK:true, bQ:true};
+let halfmoveClock = 0;
+let fullmoveNumber = 1;
+
+const initialFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+function resetGame() {
+  parseFEN(initialFen);
+  turn = 'w';
+  selected = null;
+  legalMoves = [];
+  enPassantTarget = null;
+  castlingRights = {wK:true, wQ:true, bK:true, bQ:true};
+  halfmoveClock = 0;
+  fullmoveNumber = 1;
+  statusDiv.textContent = "White to move";
+  drawBoard();
+}
+restartBtn.onclick = resetGame;
+
+function parseFEN(fen) {
+  board = [];
+  let parts = fen.split(" ");
+  let rows = parts[0].split("/");
+  for(let r=0;r<8;r++){
+    let row = [];
+    for(let ch of rows[r]){
+      if(ch >= '1' && ch <= '8'){
+        for(let i=0;i<parseInt(ch);i++) row.push('');
+      } else {
+        row.push(ch);
+      }
+    }
+    board.push(row);
+  }
+  turn = parts[1];
+  castlingRights.wK = parts[2].includes('K');
+  castlingRights.wQ = parts[2].includes('Q');
+  castlingRights.bK = parts[2].includes('k');
+  castlingRights.bQ = parts[2].includes('q');
+  enPassantTarget = (parts[3]==='-') ? null : algebraicToCoords(parts[3]);
+  halfmoveClock = parseInt(parts[4]);
+  fullmoveNumber = parseInt(parts[5]);
+}
+
+function coordsToAlgebraic(r,c){
+  return "abcdefgh"[c]+(8-r);
+}
+function algebraicToCoords(s){
+  let file = "abcdefgh".indexOf(s[0]);
+  let rank = 8 - parseInt(s[1]);
+  return [rank,file];
+}
+
+function drawBoard() {
+  boardDiv.innerHTML = "";
+  for(let r=0;r<8;r++){
+    for(let c=0;c<8;c++){
+      const square = document.createElement("div");
+      square.classList.add("square");
+      square.classList.add( (r+c)%2===0 ? "light" : "dark");
+      square.dataset.r = r;
+      square.dataset.c = c;
+      if(selected && selected[0]===r && selected[1]===c){
+        square.style.outline = "3px solid yellow";
+      }
+      // Highlight legal moves for selected piece
+      if(legalMoves.some(m => m[2]===r && m[3]===c)){
+        square.classList.add("highlight");
+      }
+
+      if(board[r][c]!==''){
+        const img = document.createElement("img");
+        img.classList.add("piece");
+        img.src = pieceToImage[board[r][c]];
+        square.appendChild(img);
+      }
+      boardDiv.appendChild(square);
+    }
+  }
+  updateStatus();
+}
+
+function updateStatus(){
+  let c = turn==='w' ? "White" : "Black";
+  if(isCheckmate(turn)){
+    statusDiv.textContent = (turn==='w'?"White":"Black")+" is checkmated. "+(turn==='w'?"Black":"White")+" wins!";
+  } else if(isStalemate(turn)){
+    statusDiv.textContent = "Stalemate! Draw.";
+  } else if(isInCheck(turn)){
+    statusDiv.textContent = c + " to move - CHECK!";
+  } else {
+    statusDiv.textContent = c + " to move";
+  }
+}
+
+// Utilities
+function isUpper(c){return c === c.toUpperCase();}
+function opponent(c){return c==='w'?'b':'w';}
+function isWhitePiece(p){return p !== '' && p === p.toUpperCase();}
+function isBlackPiece(p){return p !== '' && p === p.toLowerCase();}
+function pieceColor(p){if(p==='')return null;return isUpper(p)?'w':'b';}
+
+// Generate all legal moves for player
+function generateAllMoves(color) {
+  let moves = [];
+  for(let r=0;r<8;r++){
+    for(let c=0;c<8;c++){
+      if(pieceColor(board[r][c])===color){
+        moves.push(...generateMovesForPiece(r,c));
+      }
+    }
+  }
+  // Filter moves that cause self-check
+  return moves.filter(m => {
+    makeMove(m);
+    let illegal = isInCheck(color);
+    undoMove(m);
+    return !illegal;
+  });
+}
+
+let moveHistory = [];
+
+function makeMove(move) {
+  // move = [sr, sc, tr, tc, promotion]
+  let [sr,sc,tr,tc,promo] = move;
+  let movingPiece = board[sr][sc];
+  let captured = board[tr][tc];
+  let oldEnPassant = enPassantTarget;
+  let oldCastling = {...castlingRights};
+  let oldHalfmove = halfmoveClock;
+  let oldFullmove = fullmoveNumber;
+
+  // Save move info for undo
+  moveHistory.push({
+    sr,sc,tr,tc,
+    movingPiece,
+    captured,
+    enPassantTarget,
+    castlingRights: {...castlingRights},
+    halfmoveClock,
+    fullmoveNumber
+  });
+
+  // Handle special cases:
+  // Pawn double move sets en passant target
+  enPassantTarget = null;
+  halfmoveClock++;
+  if(movingPiece.toLowerCase()==='p') halfmoveClock=0;
+  if(captured!=='') halfmoveClock=0;
+
+  // Castling
+  if(movingPiece.toLowerCase()==='k'){
+    // Remove castling rights
+    if(isWhitePiece(movingPiece)){
+      castlingRights.wK = false;
+      castlingRights.wQ = false;
+    } else {
+      castlingRights.bK = false;
+      castlingRights.bQ = false;
+    }
+    // Castling move detection
+    if(Math.abs(tc - sc) === 2){
+      // king side or queen side castling
+      if(tc === 6){
+        // king side
+        board[tr][5] = board[tr][7];
+        board[tr][7] = '';
+      } else if(tc === 2){
+        // queen side
+        board[tr][3] = board[tr][0];
+        board[tr][0] = '';
+      }
+    }
+  }
+  // Rook moves lose castling rights
+  if(movingPiece.toLowerCase()==='r'){
+    if(sr===7 && sc===0) castlingRights.wQ=false;
+    if(sr===7 && sc===7) castlingRights.wK=false;
+    if(sr===0 && sc===0) castlingRights.bQ=false;
+    if(sr===0 && sc===7) castlingRights.bK=false;
+  }
+
+  // Pawn double move sets en passant target
+  if(movingPiece.toLowerCase()==='p' && Math.abs(tr-sr)===2){
+    enPassantTarget = [(sr+tr)/2, sc];
+  }
+
+  // En passant capture
+  if(movingPiece.toLowerCase()==='p' && tc !== sc && captured === '' && enPassantTarget && tr === enPassantTarget[0] && tc === enPassantTarget[1]){
+    // Remove captured pawn behind
+    let epRow = sr;
+    board[epRow][tc] = '';
+  }
+
+  // Promotion
+  if(promo){
+    board[tr][tc] = promo;
+    board[sr][sc] = '';
+  } else {
+    board[tr][tc] = board[sr][sc];
+    board[sr][sc] = '';
+  }
+
+  if(turn==='b') fullmoveNumber++;
+
+  turn = opponent(turn);
+}
+
+function undoMove(){
+  if(moveHistory.length===0) return;
+  let last = moveHistory.pop();
+  board[last.sr][last.sc] = last.movingPiece;
+  board[last.tr][last.tc] = last.captured;
+  enPassantTarget = last.enPassantTarget;
+  castlingRights = {...last.castlingRights};
+  halfmoveClock = last.halfmoveClock;
+  fullmoveNumber = last.fullmoveNumber;
+  turn = opponent(turn);
+}
+
+// Moves generation per piece
+function generateMovesForPiece(r,c){
+  const piece = board[r][c];
+  const color = pieceColor(piece);
+  if(!piece) return [];
+  const lower = piece.toLowerCase();
+  let moves = [];
+
+  // Direction helpers for pawns:
+  const forward = (color==='w') ? -1 : 1;
+  const startRow = (color==='w') ? 6 : 1;
+
+  if(lower === 'p'){
+    // Pawn forward moves
+    if(inBounds(r+forward,c) && board[r+forward][c]===''){
+      moves.push([r,c,r+forward,c,null]);
+      // Double step
+      if(r===startRow && board[r+2*forward][c]===''){
+        moves.push([r,c,r+2*forward,c,null]);
+      }
+    }
+    // Captures
+    for(let dc of [-1,1]){
+      let nr = r+forward, nc = c+dc;
+      if(inBounds(nr,nc)){
+        if(board[nr][nc]!=='' && pieceColor(board[nr][nc]) !== color){
+          moves.push([r,c,nr,nc,null]);
+        }
+        // En passant
+        if(enPassantTarget && nr === enPassantTarget[0] && nc === enPassantTarget[1]){
+          moves.push([r,c,nr,nc,null]);
+        }
+      }
+    }
+    // Promotion check
+    moves = moves.map(m => {
+      if((color==='w' && m[2]===0) || (color==='b' && m[2]===7)){
+        return [m[0],m[1],m[2],m[3], color==='w' ? 'Q' : 'q']; // auto promote to queen
+      }
+      return m;
+    });
+  }
+  else if(lower === 'n'){
+    const knightMoves = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+    for(let [dr,dc] of knightMoves){
+      let nr = r+dr, nc=c+dc;
+      if(inBounds(nr,nc) && pieceColor(board[nr][nc]) !== color){
+        moves.push([r,c,nr,nc,null]);
+      }
+    }
+  }
+  else if(lower === 'b' || lower === 'r' || lower === 'q'){
+    let directions = [];
+    if(lower === 'b' || lower === 'q'){
+      directions.push([-1,-1],[-1,1],[1,-1],[1,1]);
+    }
+    if(lower === 'r' || lower === 'q'){
+      directions.push([-1,0],[1,0],[0,-1],[0,1]);
+    }
+    for(let [dr,dc] of directions){
+      let nr = r+dr, nc=c+dc;
+      while(inBounds(nr,nc)){
+        if(board[nr][nc]===''){
+          moves.push([r,c,nr,nc,null]);
+        } else {
+          if(pieceColor(board[nr][nc]) !== color) moves.push([r,c,nr,nc,null]);
+          break;
+        }
+        nr+=dr; nc+=dc;
+      }
+    }
+  }
+  else if(lower === 'k'){
+    const kingMoves = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+    for(let [dr,dc] of kingMoves){
+      let nr=r+dr,nc=c+dc;
+      if(inBounds(nr,nc) && pieceColor(board[nr][nc]) !== color){
+        moves.push([r,c,nr,nc,null]);
+      }
+    }
+    // Castling
+    if(color==='w'){
+      if(castlingRights.wK && board[7][5]==='' && board[7][6]==='' && !squareAttacked(7,4,'b') && !squareAttacked(7,5,'b') && !squareAttacked(7,6,'b')){
+        moves.push([7,4,7,6,null]);
+      }
+      if(castlingRights.wQ && board[7][3]==='' && board[7][2]==='' && board[7][1]==='' && !squareAttacked(7,4,'b') && !squareAttacked(7,3,'b') && !squareAttacked(7,2,'b')){
+        moves.push([7,4,7,2,null]);
+      }
+    } else {
+      if(castlingRights.bK && board[0][5]==='' && board[0][6]==='' && !squareAttacked(0,4,'w') && !squareAttacked(0,5,'w') && !squareAttacked(0,6,'w')){
+        moves.push([0,4,0,6,null]);
+      }
+      if(castlingRights.bQ && board[0][3]==='' && board[0][2]==='' && board[0][1]==='' && !squareAttacked(0,4,'w') && !squareAttacked(0,3,'w') && !squareAttacked(0,2,'w')){
+        moves.push([0,4,0,2,null]);
+      }
+    }
+  }
+  return moves;
+}
+
+function inBounds(r,c){
+  return r>=0 && r<8 && c>=0 && c<8;
+}
+
+// Check if square r,c is attacked by color
+function squareAttacked(r,c, attackerColor){
+  for(let rr=0;rr<8;rr++){
+    for(let cc=0;cc<8;cc++){
+      let p = board[rr][cc];
+      if(pieceColor(p)===attackerColor){
+        let moves = generateMovesForPiece(rr,cc);
+        if(moves.some(m => m[2]===r && m[3]===c)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function findKing(color){
+  for(let r=0;r<8;r++){
+    for(let c=0;c<8;c++){
+      if(board[r][c].toLowerCase()==='k' && pieceColor(board[r][c])===color) return [r,c];
+    }
+  }
+  return null;
+}
+
+function isInCheck(color){
+  let [kr,kc] = findKing(color);
+  return squareAttacked(kr,kc,opponent(color));
+}
+
+function isCheckmate(color){
+  if(!isInCheck(color)) return false;
+  let moves = generateAllMoves(color);
+  return moves.length===0;
+}
+
+function isStalemate(color){
+  if(isInCheck(color)) return false;
+  let moves = generateAllMoves(color);
+  return moves.length===0;
+}
+
+function coordsEqual(a,b){
+  return a[0]===b[0] && a[1]===b[1];
+}
+
+/* ----- Player interaction ----- */
+
+boardDiv.addEventListener("click", e=>{
+  if(!e.target.classList.contains("square") && !e.target.classList.contains("piece")){
+    return;
+  }
+  let sq = e.target;
+  if(sq.classList.contains("piece")) sq = sq.parentElement;
+  let r = +sq.dataset.r;
+  let c = +sq.dataset.c;
+
+  if(selected){
+    // Check if clicked square is legal move
+    let move = legalMoves.find(m => m[2]===r && m[3]===c);
+    if(move){
+      makeMove(move);
+      selected = null;
+      legalMoves = [];
+      drawBoard();
+      if(!isCheckmate(turn) && !isStalemate(turn)){
+        setTimeout(botPlay, 100);
+      }
+      return;
+    }
+    // If clicked on own piece, select new
+    if(pieceColor(board[r][c])===turn){
+      selected = [r,c];
+      legalMoves = generateAllMoves(turn).filter(m=>m[0]===r && m[1]===c);
+      drawBoard();
+      return;
+    }
+    // Else deselect
+    selected = null;
+    legalMoves = [];
+    drawBoard();
+  } else {
+    if(pieceColor(board[r][c])===turn){
+      selected = [r,c];
+      legalMoves = generateAllMoves(turn).filter(m=>m[0]===r && m[1]===c);
+      drawBoard();
+    }
+  }
+});
+
+/* ----- Bot Logic ----- */
+function botPlay(){
+  statusDiv.textContent = (turn==='w'?"White":"Black") + " (Bot) thinking...";
+  setTimeout(()=>{
+    let best = minimaxRoot(board, 3, turn);
+    if(best && best.move){
+      makeMove(best.move);
+      drawBoard();
+    }
+  }, 100);
+}
+
+// Piece values for evaluation
+const pieceValues = {
+  p: 10, n: 30, b: 30, r: 50, q: 90, k: 900,
+  P: -10, N: -30, B: -30, R: -50, Q: -90, K: -900
+};
+
+// Evaluation function
+function evaluateBoard(bd){
+  let score = 0;
+  for(let r=0;r<8;r++){
+    for(let c=0;c<8;c++){
+      let p = bd[r][c];
+      if(p==='') continue;
+      score += pieceValues[p] || 0;
+    }
+  }
+  return score;
+}
+
+function copyBoard(bd){
+  return bd.map(r=>r.slice());
+}
+
+function minimaxRoot(bd, depth, color){
+  let bestMove = null;
+  let bestScore = (color==='w') ? Infinity : -Infinity;
+  let moves = generateAllMoves(color);
+  if(moves.length===0) return null;
+  for(let move of moves){
+    makeMove(move);
+    let score = minimax(bd, depth-1, -Infinity, Infinity, opponent(color));
+    undoMove();
+    if(color==='b'){
+      if(score > bestScore){
+        bestScore = score;
+        bestMove = move;
+      }
+    } else {
+      if(score < bestScore){
+        bestScore = score;
+        bestMove = move;
+      }
+    }
+  }
+  return {score: bestScore, move: bestMove};
+}
+
+function minimax(bd, depth, alpha, beta, color){
+  if(depth===0) return evaluateBoard(bd);
+
+  let moves = generateAllMoves(color);
+  if(moves.length===0){
+    if(isInCheck(color)) return (color==='b' ? -10000 : 10000);
+    else return 0; // stalemate
+  }
+
+  if(color==='b'){
+    let maxEval = -Infinity;
+    for(let move of moves){
+      makeMove(move);
+      let evalScore = minimax(bd, depth-1, alpha, beta, opponent(color));
+      undoMove();
+      if(evalScore > maxEval) maxEval = evalScore;
+      if(evalScore > alpha) alpha = evalScore;
+      if(beta <= alpha) break;
+    }
+    return maxEval;
+  } else {
+    let minEval = Infinity;
+    for(let move of moves){
+      makeMove(move);
+      let evalScore = minimax(bd, depth-1, alpha, beta, opponent(color));
+      undoMove();
+      if(evalScore < minEval) minEval = evalScore;
+      if(evalScore < beta) beta = evalScore;
+      if(beta <= alpha) break;
+    }
+    return minEval;
+  }
+}
+
+// Start the game initially
+resetGame();
+
+</script>
+
+<!-- Code injected by live-server -->
+<script>
+	// <![CDATA[  <-- For SVG support
+	if ('WebSocket' in window) {
+		(function () {
+			function refreshCSS() {
+				var sheets = [].slice.call(document.getElementsByTagName("link"));
+				var head = document.getElementsByTagName("head")[0];
+				for (var i = 0; i < sheets.length; ++i) {
+					var elem = sheets[i];
+					var parent = elem.parentElement || head;
+					parent.removeChild(elem);
+					var rel = elem.rel;
+					if (elem.href && typeof rel != "string" || rel.length == 0 || rel.toLowerCase() == "stylesheet") {
+						var url = elem.href.replace(/(&|\?)_cacheOverride=\d+/, '');
+						elem.href = url + (url.indexOf('?') >= 0 ? '&' : '?') + '_cacheOverride=' + (new Date().valueOf());
+					}
+					parent.appendChild(elem);
+				}
+			}
+			var protocol = window.location.protocol === 'http:' ? 'ws://' : 'wss://';
+			var address = protocol + window.location.host + window.location.pathname + '/ws';
+			var socket = new WebSocket(address);
+			socket.onmessage = function (msg) {
+				if (msg.data == 'reload') window.location.reload();
+				else if (msg.data == 'refreshcss') refreshCSS();
+			};
+			if (sessionStorage && !sessionStorage.getItem('IsThisFirstTime_Log_From_LiveServer')) {
+				console.log('Live reload enabled.');
+				sessionStorage.setItem('IsThisFirstTime_Log_From_LiveServer', true);
+			}
+		})();
+	}
+	else {
+		console.error('Upgrade your browser. This Browser is NOT supported WebSocket for Live-Reloading.');
+	}
+	// ]]>
+</script>
+</body>
+</html>
