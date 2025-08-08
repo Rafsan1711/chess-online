@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Chess vs Bot with Minimax (No libraries) — Launch Ready</title>
+<style>
+  :root{
+    --sq: 70px; /* will be updated by JS for responsiveness */
+  }
+  html,body {
+    height:100%;
+    margin:0;
+  }
+  body {
+    background: #222;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 18px;
+    box-sizing: border-box;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    user-select: none;
+  }
+  /* container keeps status + board + controls */
+  .container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    width: min(720px, 96vw);
+  }
+
+  #board {
+    display: grid;
+    grid-template-columns: repeat(8, var(--sq));
+    grid-template-rows: repeat(8, var(--sq));
+    border: 3px solid #333;
+    box-shadow: 0 0 15px #000a;
+    touch-action: manipulation;
+  }
+  .square {
+    width: var(--sq);
+    height: var(--sq);
+    position: relative;
+    overflow: hidden;
+  }
+  .light {
+    background: #eee;
+  }
+  .dark {
+    background: #769656;
+  }
+  .square.highlight {
+    background: #f9f986 !important;
+    animation: highlightMove 0.7s ease;
+  }
+  @keyframes highlightMove {
+    0% { background: #f9f986; }
+    100% { background: #eee; }
+  }
+  img.piece {
+    width: calc(var(--sq) - 10px);
+    height: calc(var(--sq) - 10px);
+    pointer-events: none;
+    user-select: none;
+    position: absolute;
+    top: 5px; left: 5px;
+  }
+
+  #status {
+    color: white;
+    font-family: monospace;
+    font-size: 16px;
+    user-select: none;
+    text-align:center;
+  }
+  .controls {
+    display:flex;
+    gap:10px;
+    align-items:center;
+    justify-content:center;
+    width:100%;
+  }
+  button#restart, button#forceSave, button#loadOpenings {
+    padding: 8px 12px;
+    font-size: 14px;
+    cursor: pointer;
+    border-radius: 5px;
+    border: none;
+    background: #556b2f;
+    color: white;
+  }
+  button#restart:hover, button#forceSave:hover, button#loadOpenings:hover {
+    background: #6b8e23;
+  }
+  .smallnote {
+    color:#ddd;
+    font-size:12px;
+    text-align:center;
+  }
+
+  /* Make sure board stacks on small screens */
+  @media (max-width:420px){
+    :root{ --sq: calc((100vw - 40px) / 8); }
+    #status { font-size:14px; }
+    button#restart { font-size:13px; padding:7px 10px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div id="status">Initializing...</div>
+  <div id="board" aria-label="Chess Board"></div>
+
+  <div class="controls">
+    <button id="restart">Restart Game (Random Colors)</button>
+    <button id="forceSave" title="Force save collected opening (if any) to Firebase">Force Save Opening</button>
+    <button id="loadOpenings" title="Load openings from Firebase (for debug)">Load Openings</button>
+  </div>
+  <div class="smallnote">
+    Board UI/colors unchanged. Responsive squares. Firebase config placeholder below — add your config and save openings will work.
+  </div>
+</div>
+
+<!-- Firebase (compat) - placeholder; user will fill firebaseConfig below -->
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+
+<script>
+/* =========================
+   Chess Game Logic + Minimax Bot
+   Features added:
+   - Random human/bot color assignment on restart
+   - Record human-as-white first 6 white-moves (algebraic like e2e4) and save to Firebase Realtime Database
+   - When bot plays white, attempt to follow recorded openings if they are legal and not disadvantageous
+   - UI unchanged in colors; responsive sizing
+   - Firebase init placeholder (fill config below)
+   ========================= */
+
+const pieceToImage = {
+  "K": "https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt45.svg",
+  "Q": "https://upload.wikimedia.org/wikipedia/commons/1/15/Chess_qlt45.svg",
+  "R": "https://upload.wikimedia.org/wikipedia/commons/7/72/Chess_rlt45.svg",
+  "B": "https://upload.wikimedia.org/wikipedia/commons/b/b1/Chess_blt45.svg",
+  "N": "https://upload.wikimedia.org/wikipedia/commons/7/70/Chess_nlt45.svg",
+  "P": "https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_plt45.svg",
+
+  "k": "https://upload.wikimedia.org/wikipedia/commons/f/f0/Chess_kdt45.svg",
+  "q": "https://upload.wikimedia.org/wikipedia/commons/4/47/Chess_qdt45.svg",
+  "r": "https://upload.wikimedia.org/wikipedia/commons/f/ff/Chess_rdt45.svg",
+  "b": "https://upload.wikimedia.org/wikipedia/commons/9/98/Chess_bdt45.svg",
+  "n": "https://upload.wikimedia.org/wikipedia/commons/e/ef/Chess_ndt45.svg",
+  "p": "https://upload.wikimedia.org/wikipedia/commons/c/c7/Chess_pdt45.svg"
+};
+
+const boardDiv = document.getElementById("board");
+const statusDiv = document.getElementById("status");
+const restartBtn = document.getElementById("restart");
+const forceSaveBtn = document.getElementById("forceSave");
+const loadOpeningsBtn = document.getElementById("loadOpenings");
+
+let board = [];
+let turn = 'w'; // whose turn on board (w or b)
+let selected = null; // selected square by human [r,c]
+let legalMoves = []; // for selected
+let enPassantTarget = null;
+let castlingRights = {wK:true, wQ:true, bK:true, bQ:true};
+let halfmoveClock = 0;
+let fullmoveNumber = 1;
+let moveHistory = []; // internal moveHistory used by makeMove/undoMove
+
+const initialFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+/* —— Role variables —— */
+let humanColor = 'w'; // will be randomized per game
+let botColor = 'b';
+let isFirebaseInitialized = false;
+
+/* —— Opening teaching/tracking —— */
+let recordingOpen = false;
+let currentRecordedWhiteMoves = []; // stores algebraic strings like "e2e4" (white's moves only)
+const MAX_WHITE_MOVES_TO_RECORD = 6; // first 6 white moves (adjustable)
+let openingsCache = []; // local cache of fetched openings from Firebase
+let activeOpeningCandidate = null; // {moves: [...], nextIdx: 0, key: 'dbKey'} when bot is following an opening
+
+/* --- Firebase config placeholder ---
+   Fill the firebaseConfig object below with your project's details.
+   Example: apiKey: "...", authDomain: "...", databaseURL: "https://your-db.firebaseio.com", projectId: "..."
+*/
+const firebaseConfig = {
+   apiKey: "AIzaSyDWbWkOSY5IA3LQuSjW5pFD0XQOWmK8mAE",
+  authDomain: "chess-online-ac582.firebaseapp.com",
+  databaseURL: "https://chess-online-ac582-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "chess-online-ac582",
+  storageBucket: "chess-online-ac582.firebasestorage.app",
+  messagingSenderId: "804954664189",
+  appId: "1:804954664189:web:b45d833a39337ce8a6e294"
+};
+
+/* Initialize Firebase if user replaced placeholders */
+function initFirebaseIfConfigured(){
+  try{
+    // Basic check to avoid initializing with placeholder values
+    if(!firebase || !firebase.initializeApp) {
+      console.warn("Firebase SDK missing.");
+      return;
+    }
+    if(firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY" && firebaseConfig.databaseURL && !firebaseConfig.databaseURL.includes("YOUR_DB")){
+      firebase.initializeApp(firebaseConfig);
+      isFirebaseInitialized = true;
+      console.log("Firebase initialized.");
+      // Try prefetch openings (non-blocking)
+      fetchOpenings().then(arr=>{
+        openingsCache = arr;
+        console.log("Prefetched openings:", openingsCache.length);
+      }).catch(err=>console.warn("No openings prefetched:", err));
+    } else {
+      console.log("Firebase config not filled. Skipping initialization. Fill firebaseConfig to enable DB saves/loads.");
+    }
+  }catch(e){
+    console.warn("Firebase init failed:", e);
+  }
+}
+
+/* ======= Board / FEN utils ======= */
+function resetGame(randomizeColors = true) {
+  parseFEN(initialFen);
+  // Randomize colors if requested
+  if(randomizeColors){
+    humanColor = Math.random() < 0.5 ? 'w' : 'b';
+    botColor = opponent(humanColor);
+  } else {
+    humanColor = 'w';
+    botColor = 'b';
+  }
+  // Reset state
+  selected = null;
+  legalMoves = [];
+  enPassantTarget = null;
+  castlingRights = {wK:true, wQ:true, bK:true, bQ:true};
+  halfmoveClock = 0;
+  fullmoveNumber = 1;
+  moveHistory = [];
+  recordingOpen = (humanColor === 'w'); // we record when human started as white
+  currentRecordedWhiteMoves = [];
+  activeOpeningCandidate = null;
+  openingsCache = []; // optionally refresh
+  updateStatus();
+  drawBoard();
+  // Preload openings from DB if firebase configured
+  if(isFirebaseInitialized){
+    fetchOpenings().then(arr=>{openingsCache = arr; console.log("Openings loaded:", arr.length)}).catch(()=>{});
+  }
+}
+restartBtn.onclick = ()=>{ resetGame(true); };
+
+/* FEN parse */
+function parseFEN(fen) {
+  board = [];
+  let parts = fen.split(" ");
+  let rows = parts[0].split("/");
+  for(let r=0;r<8;r++){
+    let row = [];
+    for(let ch of rows[r]){
+      if(ch >= '1' && ch <= '8'){
+        for(let i=0;i<parseInt(ch);i++) row.push('');
+      } else {
+        row.push(ch);
+      }
+    }
+    board.push(row);
+  }
+  turn = parts[1];
+  castlingRights.wK = parts[2].includes('K');
+  castlingRights.wQ = parts[2].includes('Q');
+  castlingRights.bK = parts[2].includes('k');
+  castlingRights.bQ = parts[2].includes('q');
+  enPassantTarget = (parts[3]==='-') ? null : algebraicToCoords(parts[3]);
+  halfmoveClock = parseInt(parts[4]);
+  fullmoveNumber = parseInt(parts[5]);
+}
+
+/* algebraic helpers */
+function coordsToAlgebraic(r,c){
+  return "abcdefgh"[c]+(8-r);
+}
+function algebraicToCoords(s){
+  let file = "abcdefgh".indexOf(s[0]);
+  let rank = 8 - parseInt(s[1]);
+  return [rank,file];
+}
+
+/* draw board */
+function drawBoard() {
+  boardDiv.innerHTML = "";
+  for(let r=0;r<8;r++){
+    for(let c=0;c<8;c++){
+      const square = document.createElement("div");
+      square.classList.add("square");
+      square.classList.add( (r+c)%2===0 ? "light" : "dark");
+      square.dataset.r = r;
+      square.dataset.c = c;
+      if(selected && selected[0]===r && selected[1]===c){
+        square.style.outline = "3px solid yellow";
+      }
+      // Highlight legal moves for selected piece
+      if(legalMoves.some(m => m[2]===r && m[3]===c)){
+        square.classList.add("highlight");
+      }
+
+      if(board[r][c]!==''){
+        const img = document.createElement("img");
+        img.classList.add("piece");
+        img.src = pieceToImage[board[r][c]];
+        square.appendChild(img);
+      }
+      boardDiv.appendChild(square);
+    }
+  }
+  updateStatus();
+}
+
+/* status message */
+function updateStatus(){
+  let humanTxt = humanColor==='w' ? "Human: White" : "Human: Black";
+  let botTxt = botColor==='w' ? "Bot: White" : "Bot: Black";
+  let turnTxt = turn==='w' ? "White to move" : "Black to move";
+  if(isCheckmate(turn)){
+    statusDiv.textContent = (turn==='w'?"White":"Black")+" is checkmated. "+(turn==='w'?"Black":"White")+" wins! ("+humanTxt+" | "+botTxt+")";
+  } else if(isStalemate(turn)){
+    statusDiv.textContent = "Stalemate! Draw. ("+humanTxt+" | "+botTxt+")";
+  } else if(isInCheck(turn)){
+    statusDiv.textContent = turnTxt + " - CHECK! ("+humanTxt+" | "+botTxt+")";
+  } else {
+    // Show who is bot/human and whose turn
+    let actor = (turn === humanColor) ? "Human" : "Bot";
+    statusDiv.textContent = `${turn==='w' ? 'White' : 'Black'} to move — ${actor} (${humanTxt}, ${botTxt})`;
+  }
+}
+
+/* Utilities */
+function isUpper(c){return c === c.toUpperCase();}
+function opponent(c){return c==='w'?'b':'w';}
+function isWhitePiece(p){return p !== '' && p === p.toUpperCase();}
+function isBlackPiece(p){return p !== '' && p === p.toLowerCase();}
+function pieceColor(p){if(p==='')return null;return isUpper(p)?'w':'b';}
+
+/* Move generation and rules (copied & preserved, extended) */
+
+function generateAllMoves(color) {
+  let moves = [];
+  for(let r=0;r<8;r++){
+    for(let c=0;c<8;c++){
+      if(pieceColor(board[r][c])===color){
+        moves.push(...generateMovesForPiece(r,c));
+      }
+    }
+  }
+  // Filter moves that cause self-check
+  return moves.filter(m => {
+    makeMove(m);
+    let illegal = isInCheck(color);
+    undoMove();
+    return !illegal;
+  });
+}
+
+function makeMove(move) {
+  // move = [sr, sc, tr, tc, promotion]
+  let [sr,sc,tr,tc,promo] = move;
+  let movingPiece = board[sr][sc];
+  let captured = board[tr][tc];
+
+  // Save move info for undo
+  moveHistory.push({
+    sr,sc,tr,tc,
+    movingPiece,
+    captured,
+    enPassantTarget,
+    castlingRights: {...castlingRights},
+    halfmoveClock,
+    fullmoveNumber
+  });
+
+  // Handle special cases:
+  // Pawn double move sets en passant target
+  enPassantTarget = null;
+  halfmoveClock++;
+  if(movingPiece.toLowerCase()==='p') halfmoveClock=0;
+  if(captured!=='') halfmoveClock=0;
+
+  // Castling
+  if(movingPiece.toLowerCase()==='k'){
+    // Remove castling rights
+    if(isWhitePiece(movingPiece)){
+      castlingRights.wK = false;
+      castlingRights.wQ = false;
+    } else {
+      castlingRights.bK = false;
+      castlingRights.bQ = false;
+    }
+    // Castling move detection
+    if(Math.abs(tc - sc) === 2){
+      // king side or queen side castling
+      if(tc === 6){
+        // king side
+        board[tr][5] = board[tr][7];
+        board[tr][7] = '';
+      } else if(tc === 2){
+        // queen side
+        board[tr][3] = board[tr][0];
+        board[tr][0] = '';
+      }
+    }
+  }
+  // Rook moves lose castling rights
+  if(movingPiece.toLowerCase()==='r'){
+    if(sr===7 && sc===0) castlingRights.wQ=false;
+    if(sr===7 && sc===7) castlingRights.wK=false;
+    if(sr===0 && sc===0) castlingRights.bQ=false;
+    if(sr===0 && sc===7) castlingRights.bK=false;
+  }
+
+  // Pawn double move sets en passant target
+  if(movingPiece.toLowerCase()==='p' && Math.abs(tr-sr)===2){
+    enPassantTarget = [(sr+tr)/2, sc];
+  }
+
+  // En passant capture
+  if(movingPiece.toLowerCase()==='p' && tc !== sc && captured === '' && enPassantTarget && tr === enPassantTarget[0] && tc === enPassantTarget[1]){
+    // Remove captured pawn behind
+    let epRow = sr;
+    board[epRow][tc] = '';
+  }
+
+  // Promotion
+  if(promo){
+    board[tr][tc] = promo;
+    board[sr][sc] = '';
+  } else {
+    board[tr][tc] = board[sr][sc];
+    board[sr][sc] = '';
+  }
+
+  if(turn==='b') fullmoveNumber++;
+
+  turn = opponent(turn);
+}
+
+function undoMove(){
+  if(moveHistory.length===0) return;
+  let last = moveHistory.pop();
+  board[last.sr][last.sc] = last.movingPiece;
+  board[last.tr][last.tc] = last.captured;
+  enPassantTarget = last.enPassantTarget;
+  castlingRights = {...last.castlingRights};
+  halfmoveClock = last.halfmoveClock;
+  fullmoveNumber = last.fullmoveNumber;
+  turn = opponent(turn);
+}
+
+function generateMovesForPiece(r,c){
+  const piece = board[r][c];
+  const color = pieceColor(piece);
+  if(!piece) return [];
+  const lower = piece.toLowerCase();
+  let moves = [];
+
+  // Direction helpers for pawns:
+  const forward = (color==='w') ? -1 : 1;
+  const startRow = (color==='w') ? 6 : 1;
+
+  if(lower === 'p'){
+    // Pawn forward moves
+    if(inBounds(r+forward,c) && board[r+forward][c]===''){
+      moves.push([r,c,r+forward,c,null]);
+      // Double step
+      if(r===startRow && board[r+2*forward][c]===''){
+        moves.push([r,c,r+2*forward,c,null]);
+      }
+    }
+    // Captures
+    for(let dc of [-1,1]){
+      let nr = r+forward, nc = c+dc;
+      if(inBounds(nr,nc)){
+        if(board[nr][nc]!=='' && pieceColor(board[nr][nc]) !== color){
+          moves.push([r,c,nr,nc,null]);
+        }
+        // En passant
+        if(enPassantTarget && nr === enPassantTarget[0] && nc === enPassantTarget[1]){
+          moves.push([r,c,nr,nc,null]);
+        }
+      }
+    }
+    // Promotion check
+    moves = moves.map(m => {
+      if((color==='w' && m[2]===0) || (color==='b' && m[2]===7)){
+        return [m[0],m[1],m[2],m[3], color==='w' ? 'Q' : 'q']; // auto promote to queen
+      }
+      return m;
+    });
+  }
+  else if(lower === 'n'){
+    const knightMoves = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+    for(let [dr,dc] of knightMoves){
+      let nr = r+dr, nc=c+dc;
+      if(inBounds(nr,nc) && pieceColor(board[nr][nc]) !== color){
+        moves.push([r,c,nr,nc,null]);
+      }
+    }
+  }
+  else if(lower === 'b' || lower === 'r' || lower === 'q'){
+    let directions = [];
+    if(lower === 'b' || lower === 'q'){
+      directions.push([-1,-1],[-1,1],[1,-1],[1,1]);
+    }
+    if(lower === 'r' || lower === 'q'){
+      directions.push([-1,0],[1,0],[0,-1],[0,1]);
+    }
+    for(let [dr,dc] of directions){
+      let nr = r+dr, nc=c+dc;
+      while(inBounds(nr,nc)){
+        if(board[nr][nc]===''){
+          moves.push([r,c,nr,nc,null]);
+        } else {
+          if(pieceColor(board[nr][nc]) !== color) moves.push([r,c,nr,nc,null]);
+          break;
+        }
+        nr+=dr; nc+=dc;
+      }
+    }
+  }
+  else if(lower === 'k'){
+    const kingMoves = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+    for(let [dr,dc] of kingMoves){
+      let nr=r+dr,nc=c+dc;
+      if(inBounds(nr,nc) && pieceColor(board[nr][nc]) !== color){
+        moves.push([r,c,nr,nc,null]);
+      }
+    }
+    // Castling
+    if(color==='w'){
+      if(castlingRights.wK && board[7][5]==='' && board[7][6]==='' && !squareAttacked(7,4,'b') && !squareAttacked(7,5,'b') && !squareAttacked(7,6,'b')){
+        moves.push([7,4,7,6,null]);
+      }
+      if(castlingRights.wQ && board[7][3]==='' && board[7][2]==='' && board[7][1]==='' && !squareAttacked(7,4,'b') && !squareAttacked(7,3,'b') && !squareAttacked(7,2,'b')){
+        moves.push([7,4,7,2,null]);
+      }
+    } else {
+      if(castlingRights.bK && board[0][5]==='' && board[0][6]==='' && !squareAttacked(0,4,'w') && !squareAttacked(0,5,'w') && !squareAttacked(0,6,'w')){
+        moves.push([0,4,0,6,null]);
+      }
+      if(castlingRights.bQ && board[0][3]==='' && board[0][2]==='' && board[0][1]==='' && !squareAttacked(0,4,'w') && !squareAttacked(0,3,'w') && !squareAttacked(0,2,'w')){
+        moves.push([0,4,0,2,null]);
+      }
+    }
+  }
+  return moves;
+}
+function inBounds(r,c){ return r>=0 && r<8 && c>=0 && c<8; }
+
+/* Attack detection */
+function squareAttacked(r,c, attackerColor){
+  for(let rr=0;rr<8;rr++){
+    for(let cc=0;cc<8;cc++){
+      let p = board[rr][cc];
+      if(pieceColor(p)===attackerColor){
+        let moves = generateMovesForPiece(rr,cc);
+        if(moves.some(m => m[2]===r && m[3]===c)) return true;
+      }
+    }
+  }
+  return false;
+}
+function findKing(color){
+  for(let r=0;r<8;r++){
+    for(let c=0;c<8;c++){
+      if(board[r][c].toLowerCase()==='k' && pieceColor(board[r][c])===color) return [r,c];
+    }
+  }
+  return null;
+}
+function isInCheck(color){
+  let pos = findKing(color);
+  if(!pos) return false;
+  let [kr,kc] = pos;
+  return squareAttacked(kr,kc,opponent(color));
+}
+function isCheckmate(color){
+  if(!isInCheck(color)) return false;
+  let moves = generateAllMoves(color);
+  return moves.length===0;
+}
+function isStalemate(color){
+  if(isInCheck(color)) return false;
+  let moves = generateAllMoves(color);
+  return moves.length===0;
+}
+function coordsEqual(a,b){ return a[0]===b[0] && a[1]===b[1]; }
+
+/* ----- Player interaction (modified to respect humanColor) ----- */
+boardDiv.addEventListener("click", e=>{
+  // Accept clicks on square or piece
+  if(!e.target.classList.contains("square") && !e.target.classList.contains("piece")){
+    return;
+  }
+  let sq = e.target;
+  if(sq.classList.contains("piece")) sq = sq.parentElement;
+  let r = +sq.dataset.r;
+  let c = +sq.dataset.c;
+
+  // Only allow human to interact when it's human's turn
+  if(turn !== humanColor) return;
+
+  if(selected){
+    // Check if clicked square is legal move
+    let move = legalMoves.find(m => m[2]===r && m[3]===c);
+    if(move){
+      // BEFORE making the move, capture algebraic of this move if human is white and we're recording white moves
+      let alg = coordsToAlgebraic(move[0],move[1]) + coordsToAlgebraic(move[2],move[3]);
+      makeMove(move);
+      // If human is white and this is a white-move, record it
+      if(humanColor === 'w'){
+        // Note: We only record the white moves that the human made (every time human is 'w', they move on 'w' turns)
+        if(currentRecordedWhiteMoves.length < MAX_WHITE_MOVES_TO_RECORD){
+          currentRecordedWhiteMoves.push(alg);
+          // If reached capacity, auto-save to Firebase (if enabled)
+          if(currentRecordedWhiteMoves.length >= MAX_WHITE_MOVES_TO_RECORD){
+            saveOpening(currentRecordedWhiteMoves).then(()=>{ console.log("Opening auto-saved."); }).catch(()=>{});
+          }
+        }
+      }
+      selected = null;
+      legalMoves = [];
+      drawBoard();
+      // If now it's bot's turn, trigger botPlay
+      if(turn === botColor && !isCheckmate(turn) && !isStalemate(turn)){
+        setTimeout(botPlay, 120);
+      }
+      return;
+    }
+    // If clicked on own piece, select new
+    if(pieceColor(board[r][c])===turn){
+      selected = [r,c];
+      legalMoves = generateAllMoves(turn).filter(m=>m[0]===r && m[1]===c);
+      drawBoard();
+      return;
+    }
+    // Else deselect
+    selected = null;
+    legalMoves = [];
+    drawBoard();
+  } else {
+    if(pieceColor(board[r][c])===turn){
+      selected = [r,c];
+      legalMoves = generateAllMoves(turn).filter(m=>m[0]===r && m[1]===c);
+      drawBoard();
+    }
+  }
+});
+
+/* ----- Bot Logic (enhanced with opening-following) ----- */
+function botPlay(){
+  // Only run when it's bot's turn
+  if(turn !== botColor) return;
+  statusDiv.textContent = (turn==='w'?"White":"Black") + " (Bot) thinking...";
+
+  setTimeout(async ()=>{
+    // Attempt opening-follow if bot is white or if activeOpeningCandidate is present
+    let playedFromOpening = false;
+    if(botColor === 'w'){
+      // If no active candidate, try to pick one based on cached DB openings
+      if(!activeOpeningCandidate){
+        // Ensure openingsCache is loaded, fetch if empty and firebase initialized
+        if(isFirebaseInitialized && openingsCache.length === 0){
+          try{
+            openingsCache = await fetchOpenings();
+          }catch(e){}
+        }
+        // Pick best opening candidate (try to use the first recorded white move)
+        if(openingsCache && openingsCache.length > 0){
+          // evaluate current board
+          let currentEval = evaluateBoard(board);
+          let botEval = (botColor === 'b') ? currentEval : -currentEval;
+
+          // Score each opening by simulating its first white move (if legal)
+          let candidateList = [];
+          for(let op of openingsCache){
+            if(!op.moves || op.moves.length === 0) continue;
+            let firstWM = op.moves[0]; // like "e2e4"
+            // find move object matching this algebraic
+            let moveObj = findMoveByAlgebraic(firstWM, botColor);
+            if(moveObj){
+              makeMove(moveObj);
+              let afterEval = evaluateBoard(board);
+              undoMove();
+              let afterBotEval = (botColor === 'b') ? afterEval : -afterEval;
+              // prefer moves that keep botEval stable or improve
+              candidateList.push({op, moveObj, afterBotEval});
+            }
+          }
+          // choose best op by afterBotEval desc
+          candidateList.sort((a,b)=> b.afterBotEval - a.afterBotEval);
+          if(candidateList.length > 0){
+            let chosen = candidateList[0];
+            // Accept if afterBotEval >= botEval - tolerance
+            if(chosen.afterBotEval >= ((botColor==='b')?currentEval:-currentEval) - 5){
+              // Use this opening; set activeOpeningCandidate with index 0 (we just played its first white move)
+              makeMove(chosen.moveObj);
+              // mark that bot consumed the first white move of this opening
+              activeOpeningCandidate = {
+                moves: chosen.op.moves.slice(), // copy
+                nextIdx: 1,
+                key: chosen.op.key || null
+              };
+              playedFromOpening = true;
+            }
+          }
+        }
+      } else {
+        // activeOpeningCandidate exists -> try to play its next white move (if legal)
+        let nextAlg = activeOpeningCandidate.moves[activeOpeningCandidate.nextIdx];
+        if(nextAlg){
+          let moveObj = findMoveByAlgebraic(nextAlg, botColor);
+          if(moveObj){
+            // Quick evaluation: only play if not losing immediate material (simple heuristic)
+            makeMove(moveObj);
+            let afterEval = evaluateBoard(board);
+            undoMove();
+            let botAfter = (botColor === 'b') ? afterEval : -afterEval;
+            let currentEval = evaluateBoard(board);
+            let botCurrent = (botColor === 'b') ? currentEval : -currentEval;
+            if(botAfter >= botCurrent - 6){ // tolerance
+              makeMove(moveObj);
+              activeOpeningCandidate.nextIdx++;
+              playedFromOpening = true;
+              // If opening moves exhausted, unset candidate
+              if(activeOpeningCandidate.nextIdx >= activeOpeningCandidate.moves.length){
+                activeOpeningCandidate = null;
+              }
+            } else {
+              // abandon opening if it looks bad now
+              activeOpeningCandidate = null;
+            }
+          } else {
+            // cannot follow the opening (position diverged)
+            activeOpeningCandidate = null;
+          }
+        } else {
+          activeOpeningCandidate = null;
+        }
+      }
+    }
+
+    if(!playedFromOpening){
+      // fallback to minimax root
+      let best = minimaxRoot(board, 3, turn);
+      if(best && best.move){
+        makeMove(best.move);
+      }
+    }
+    drawBoard();
+    // After bot played, if it's now human's turn and human is white and recording, do nothing (human moves will be recorded)
+  }, 80);
+}
+
+/* ----- Opening helper functions ----- */
+/* Find a move in generateAllMoves(color) that matches algebraic like e2e4 or g1f3 */
+function findMoveByAlgebraic(alg, color){
+  if(!alg || alg.length !== 4) return null;
+  let all = generateAllMoves(color);
+  for(let mv of all){
+    let a = coordsToAlgebraic(mv[0],mv[1]) + coordsToAlgebraic(mv[2],mv[3]);
+    if(a === alg) return mv;
+  }
+  return null;
+}
+
+/* Force save currentRecordedWhiteMoves to Firebase (if any) */
+forceSaveBtn.onclick = ()=>{
+  if(currentRecordedWhiteMoves.length === 0){
+    alert("No recorded white moves to save.");
+    return;
+  }
+  saveOpening(currentRecordedWhiteMoves).then(()=>{
+    alert("Opening saved (or attempted).");
+  }).catch(err=>{
+    alert("Save failed. Check console for details.");
+    console.error(err);
+  });
+};
+
+/* Button to load openings (for debug) */
+loadOpeningsBtn.onclick = async ()=>{
+  try{
+    let arr = await fetchOpenings();
+    console.log("Openings loaded (debug):", arr);
+    alert("Loaded " + arr.length + " openings (see console).");
+  }catch(e){
+    alert("Failed to load openings. Check firebase config and console.");
+  }
+};
+
+/* ===== Firebase save/load implementations ===== */
+function saveOpening(movesArray){
+  return new Promise((resolve,reject)=>{
+    if(!isFirebaseInitialized){
+      console.warn("Firebase not initialized. Save skipped.");
+      return reject("Firebase not initialized");
+    }
+    if(!Array.isArray(movesArray) || movesArray.length===0) return reject("No moves");
+
+    try{
+      const dbRef = firebase.database().ref('openings');
+      const payload = {
+        moves: movesArray,
+        createdAt: Date.now(),
+        meta: {
+          recordedAs: "human-white",
+          whiteMovesCount: movesArray.length
+        }
+      };
+      const newRef = dbRef.push(payload, err=>{
+        if(err) reject(err); else resolve(newRef.key);
+      });
+    }catch(e){
+      reject(e);
+    }
+  });
+}
+
+function fetchOpenings(){
+  return new Promise((resolve,reject)=>{
+    if(!isFirebaseInitialized) {
+      return reject("Firebase not initialized");
+    }
+    try{
+      const dbRef = firebase.database().ref('openings');
+      dbRef.once('value', snap=>{
+        let out = [];
+        snap.forEach(child=>{
+          let val = child.val();
+          out.push({ key: child.key, moves: val.moves || [], meta: val.meta || {} });
+        });
+        resolve(out);
+      }, err=>{
+        reject(err);
+      });
+    }catch(e){
+      reject(e);
+    }
+  });
+}
+
+/* ===== Evaluation + Minimax (preserved with slight refinements) ===== */
+const pieceValues = {
+  p: 10, n: 30, b: 30, r: 50, q: 90, k: 900,
+  P: -10, N: -30, B: -30, R: -50, Q: -90, K: -900
+};
+
+function evaluateBoard(bd){
+  let score = 0;
+  for(let r=0;r<8;r++){
+    for(let c=0;c<8;c++){
+      let p = bd[r][c];
+      if(p==='') continue;
+      score += pieceValues[p] || 0;
+    }
+  }
+  return score;
+}
+
+function copyBoard(bd){ return bd.map(r=>r.slice()); }
+
+function minimaxRoot(bd, depth, color){
+  let bestMove = null;
+  let bestScore = (color==='w') ? Infinity : -Infinity;
+  let moves = generateAllMoves(color);
+  if(moves.length===0) return null;
+  // move ordering: prefer captures first to speed alpha-beta
+  moves.sort((a,b)=>{
+    let capA = board[a[2]][a[3]] !== '' ? 1 : 0;
+    let capB = board[b[2]][b[3]] !== '' ? 1 : 0;
+    return capB - capA;
+  });
+  for(let move of moves){
+    makeMove(move);
+    let score = minimax(bd, depth-1, -Infinity, Infinity, opponent(color));
+    undoMove();
+    if(color==='b'){
+      if(score > bestScore){
+        bestScore = score;
+        bestMove = move;
+      }
+    } else {
+      if(score < bestScore){
+        bestScore = score;
+        bestMove = move;
+      }
+    }
+  }
+  return {score: bestScore, move: bestMove};
+}
+
+function minimax(bd, depth, alpha, beta, color){
+  if(depth===0) return evaluateBoard(bd);
+
+  let moves = generateAllMoves(color);
+  if(moves.length===0){
+    if(isInCheck(color)) return (color==='b' ? -10000 : 10000);
+    else return 0; // stalemate
+  }
+
+  if(color==='b'){
+    let maxEval = -Infinity;
+    for(let move of moves){
+      makeMove(move);
+      let evalScore = minimax(bd, depth-1, alpha, beta, opponent(color));
+      undoMove();
+      if(evalScore > maxEval) maxEval = evalScore;
+      if(evalScore > alpha) alpha = evalScore;
+      if(beta <= alpha) break;
+    }
+    return maxEval;
+  } else {
+    let minEval = Infinity;
+    for(let move of moves){
+      makeMove(move);
+      let evalScore = minimax(bd, depth-1, alpha, beta, opponent(color));
+      undoMove();
+      if(evalScore < minEval) minEval = evalScore;
+      if(evalScore < beta) beta = evalScore;
+      if(beta <= alpha) break;
+    }
+    return minEval;
+  }
+}
+
+/* Start initial game & Firebase init */
+(function boot(){
+  // Responsive sizing for squares (maintain original 70px as upper limit)
+  function computeSquareSize(){
+    // Use min of 70px and 1/8th of available board width
+    const containerWidth = Math.min(window.innerWidth * 0.96, 720);
+    const sq = Math.floor(Math.min(70, containerWidth / 8));
+    document.documentElement.style.setProperty('--sq', sq + 'px');
+  }
+  computeSquareSize();
+  window.addEventListener('resize', computeSquareSize);
+
+  // Initialize firebase if user filled config
+  initFirebaseIfConfigured();
+  // Start a randomized game
+  resetGame(true);
+
+  // If bot starts (i.e., botColor equals the first turn), let bot move
+  if(turn === botColor){
+    setTimeout(botPlay, 160);
+  }
+})();
+
+/* ===== small debug helpers for console ===== */
+window._debug = {
+  boardRef: () => board,
+  moveHistoryRef: () => moveHistory,
+  eval: () => evaluateBoard(board),
+  saveOpeningNow: ()=> saveOpening(currentRecordedWhiteMoves),
+};
+
+/* End of script */
+</script>
+
+<!-- Live reload script (optional injected by live-server during dev) -->
+<script>
+	// <![CDATA[  <-- For SVG support
+	if ('WebSocket' in window) {
+		(function () {
+			function refreshCSS() {
+				var sheets = [].slice.call(document.getElementsByTagName("link"));
+				var head = document.getElementsByTagName("head")[0];
+				for (var i = 0; i < sheets.length; ++i) {
+					var elem = sheets[i];
+					var parent = elem.parentElement || head;
+					parent.removeChild(elem);
+					var rel = elem.rel;
+					if (elem.href && typeof rel != "string" || rel.length == 0 || rel.toLowerCase() == "stylesheet") {
+						var url = elem.href.replace(/(&|\?)_cacheOverride=\d+/, '');
+						elem.href = url + (url.indexOf('?') >= 0 ? '&' : '?') + '_cacheOverride=' + (new Date().valueOf());
+					}
+					parent.appendChild(elem);
+				}
+			}
+			var protocol = window.location.protocol === 'http:' ? 'ws://' : 'wss://';
+			var address = protocol + window.location.host + window.location.pathname + '/ws';
+			var socket = new WebSocket(address);
+			socket.onmessage = function (msg) {
+				if (msg.data == 'reload') window.location.reload();
+				else if (msg.data == 'refreshcss') refreshCSS();
+			};
+			if (sessionStorage && !sessionStorage.getItem('IsThisFirstTime_Log_From_LiveServer')) {
+				console.log('Live reload enabled.');
+				sessionStorage.setItem('IsThisFirstTime_Log_From_LiveServer', true);
+			}
+		})();
+	}
+	else {
+		console.error('Upgrade your browser. This Browser is NOT supported WebSocket for Live-Reloading.');
+	}
+	// ]]>
+</script>
+</body>
+</html>
