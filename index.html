@@ -1,545 +1,383 @@
-<!doctype html>
-<html lang="bn">
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Online Chess — Launch Ready (v2)</title>
-
-  <!-- Bootstrap for basic UI -->
-  <link rel="stylesheet"
-        href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css"
-        crossorigin="anonymous">
-
-  <!-- Chessboard.js CSS -->
-  <link rel="stylesheet"
+    <title>Firebase Online Chess Game</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Bootstrap CSS & FontAwesome -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css">
+    <script src="https://kit.fontawesome.com/5b14db5f0b.js" crossorigin="anonymous"></script>
+    <!-- Chessboard.js CSS -->
+    <link rel="stylesheet"
         href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css"
         crossorigin="anonymous">
-
-  <style>
-    body { background:#0f172a; color:#e6eef8; font-family: Arial, Helvetica, sans-serif; }
-    main { padding: 20px; max-width: 1100px; margin: 0 auto; }
-    .screen { display: none; }
-    .visible { display: block; }
-    #myBoard { width: 480px; margin: 0 auto; }
-    .controls { text-align:center; margin-top:12px; }
-    .info { text-align:center; margin-top:8px; color:#9fb0d5; }
-    footer { text-align:center; color:#6b7d99; margin-top: 18px; }
-    .btn-outline-safe { border-color:#60a5fa; color:#60a5fa }
-    .highlight-white { box-shadow: inset 0 0 40px rgba(255,255,255,0.06); }
-    .highlight-black { box-shadow: inset 0 0 40px rgba(0,0,0,0.35); }
-    /* small responsive */
-    @media (max-width:540px){
-       #myBoard { width: 95vw; }
-    }
-  </style>
+    <!-- Custom CSS for pieces -->
+    <style>
+        #myBoard {
+            margin: 20px auto;
+            min-width: 320px;
+        }
+        .hidden { display: none !important; }
+        .centered { text-align: center; margin-top: 30px; }
+        .piece img { width: 100%; height: 100%; }
+        .avatar {
+            border-radius: 50%;
+            width: 42px;
+            height: 42px;
+            object-fit: cover;
+        }
+    </style>
 </head>
-
 <body>
-  <main>
-    <!-- LOGIN SCREEN -->
-    <section id="loginScreen" class="screen visible">
-      <h1 class="text-center">Online Chess (v2)</h1>
-      <p class="text-center info">Sign in with Google to play real-time with others (Firebase Auth + Realtime DB).</p>
-      <div class="text-center my-4">
-        <button id="btnGoogleSignIn" class="btn btn-primary btn-lg">Sign in with Google</button>
-      </div>
-    </section>
+    <!-- Screens -->
+    <!-- Login Screen -->
+    <div id="login-screen" class="container centered">
+        <h2>Sign in to Play Chess</h2>
+        <button id="google-signin" class="btn btn-danger mt-4">
+            <i class="fab fa-google"></i> Sign in with Google
+        </button>
+    </div>
 
-    <!-- HOME SCREEN -->
-    <section id="homeScreen" class="screen px-3">
-      <div class="d-flex justify-content-between align-items-center">
+    <!-- Home Screen -->
+    <div id="home-screen" class="container centered hidden">
         <div>
-          <h3 id="welcomeText">Welcome</h3>
-          <div id="userInfo" class="text-muted"></div>
+            <img id="user-avatar" class="avatar mb-2" src="" alt="avatar">
+            <div>Welcome, <span id="user-name"></span></div>
         </div>
-        <div>
-          <button id="btnSignOut" class="btn btn-outline-light">Sign out</button>
+        <button id="start-game-btn" class="btn btn-success mt-4">Start Game</button>
+        <button id="logout-btn" class="btn btn-secondary ml-2">Logout</button>
+    </div>
+
+    <!-- Waiting Screen -->
+    <div id="waiting-screen" class="container centered hidden">
+        <h3>Waiting for another player...</h3>
+        <div class="spinner-border mt-3" role="status"></div>
+        <p class="mt-4">If you wait too long, you can <button id="cancel-wait" class="btn btn-link">cancel</button>.</p>
+    </div>
+
+    <!-- Chess Game Screen -->
+    <div id="game-screen" class="container hidden">
+        <div class="row my-3">
+            <div class="col-12 text-center">
+                <h3 id="game-title">Chess Match</h3>
+                <span id="match-status"></span>
+            </div>
         </div>
-      </div>
-
-      <hr/>
-
-      <div class="text-center my-4">
-        <button id="btnStartGame" class="btn btn-success btn-lg">Start Game (Quick Match)</button>
-      </div>
-
-      <div class="info">Click Start Game → you'll be placed into waiting queue. When two players are matched, the match starts instantly for both players.</div>
-    </section>
-
-    <!-- WAITING SCREEN -->
-    <section id="waitingScreen" class="screen text-center px-3">
-      <h3>Waiting for an opponent...</h3>
-      <p id="waitingInfo" class="info">You are in queue.</p>
-      <div class="my-3">
-        <button id="btnCancelWaiting" class="btn btn-danger">Cancel</button>
-      </div>
-    </section>
-
-    <!-- MATCH SCREEN -->
-    <section id="matchScreen" class="screen px-3">
-      <div class="d-flex justify-content-between align-items-center">
-        <div>
-          <h4 id="matchVs">Match</h4>
-          <p id="matchStatus" class="text-muted"></p>
+        <div class="row align-items-center">
+            <div class="col-md-6">
+                <div class="mb-2">
+                    <span><img id="white-avatar" class="avatar" src=""> <b id="white-name"></b> (White)</span>
+                </div>
+                <div class="mb-2">
+                    <span><img id="black-avatar" class="avatar" src=""> <b id="black-name"></b> (Black)</span>
+                </div>
+                <div id="gameStatus" class="my-2"></div>
+                <button id="leave-game-btn" class="btn btn-danger">Leave Game</button>
+            </div>
+            <div class="col-md-6">
+                <div id="myBoard"></div>
+            </div>
         </div>
-        <div>
-          <button id="btnLeaveMatch" class="btn btn-outline-danger">Leave Match</button>
-        </div>
-      </div>
+    </div>
 
-      <div id="myBoard" class="mx-auto mt-3"></div>
-
-      <div class="info mt-2">
-        Turn: <span id="turnIndicator">-</span> &nbsp; | &nbsp; FEN: <span id="fenDisplay">-</span>
-      </div>
-
-      <div class="controls">
-        <button id="btnResign" class="btn btn-warning">Resign</button>
-      </div>
-    </section>
-  </main>
-
-  <footer>
-    Put chess.js in js/chess.js, piece images in /piece (wK.svg, bK.svg, etc).
-  </footer>
-
-  <!-- jQuery (used by chessboard.js) -->
-  <script src="https://code.jquery.com/jquery-3.5.1.js" crossorigin="anonymous"></script>
-
-  <!-- Firebase (compat libraries for simpler migration) -->
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
-
-  <!-- Chessboard.js -->
-  <script defer src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"
-          crossorigin="anonymous"></script>
-
-  <!-- chess.js (you said you'll keep locally at js/chess.js) -->
-  <script defer src="js/chess.js"></script>
-
-  <script>
-    // ============================
-    // IMPORTANT: Replace with YOUR Firebase config (launch-ready: fill these)
-    // ============================
+    <!-- Firebase & Dependencies -->
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <!-- Chessboard.js -->
+    <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"
+        crossorigin="anonymous"></script>
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    <!-- Chess.js (local file, must be present in same directory) -->
+    <script src="js/chess.js"></script>
+    <script>
+    // ----------------- CONFIGURE THIS SECTION -------------------
+    // Replace with your Firebase project config:
     const firebaseConfig = {
-      apiKey: "REPLACE_WITH_YOUR_API_KEY",
-      authDomain: "REPLACE_WITH_PROJECT.firebaseapp.com",
-      databaseURL: "https://REPLACE_WITH_PROJECT.firebaseio.com",
-      projectId: "REPLACE_WITH_PROJECT",
-      storageBucket: "REPLACE_WITH_PROJECT.appspot.com",
-      messagingSenderId: "REPLACE_ME",
-      appId: "REPLACE_ME"
+        apiKey: "YOUR_API_KEY",
+        authDomain: "YOUR_PROJECT.firebaseapp.com",
+        databaseURL: "https://YOUR_PROJECT.firebaseio.com",
+        projectId: "YOUR_PROJECT",
+        appId: "YOUR_APP_ID"
     };
-    // ============================
+    // ------------------------------------------------------------
+
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
     const db = firebase.database();
 
-    // UI refs
-    const loginScreen = document.getElementById('loginScreen');
-    const homeScreen = document.getElementById('homeScreen');
-    const waitingScreen = document.getElementById('waitingScreen');
-    const matchScreen = document.getElementById('matchScreen');
+    // ---- UI Screen helpers ----
+    function showScreen(screen) {
+        $('#login-screen, #home-screen, #waiting-screen, #game-screen').addClass('hidden');
+        $(`#${screen}`).removeClass('hidden');
+    }
 
-    const btnGoogleSignIn = document.getElementById('btnGoogleSignIn');
-    const btnSignOut = document.getElementById('btnSignOut');
-    const welcomeText = document.getElementById('welcomeText');
-    const userInfo = document.getElementById('userInfo');
-    const btnStartGame = document.getElementById('btnStartGame');
-    const btnCancelWaiting = document.getElementById('btnCancelWaiting');
-    const waitingInfo = document.getElementById('waitingInfo');
-
-    const matchVs = document.getElementById('matchVs');
-    const matchStatus = document.getElementById('matchStatus');
-    const turnIndicator = document.getElementById('turnIndicator');
-    const fenDisplay = document.getElementById('fenDisplay');
-    const btnLeaveMatch = document.getElementById('btnLeaveMatch');
-    const btnResign = document.getElementById('btnResign');
-
-    // state
+    // ---- Auth ----
     let currentUser = null;
-    let waitingRef = null;
-    let waitingKey = null;
-    let pairListener = null;
-    let waitingListener = null;
-
-    let matchId = null;
-    let matchRef = null;
-    let matchMovesRef = null;
-    let matchListener = null;
-    let matchMovesChildListener = null;
-
-    // chess state
-    let board = null;
-    let game = null;
-    let myColor = null; // 'w' or 'b'
-
-    // helper: show screen
-    function showScreen(screenEl) {
-      [loginScreen, homeScreen, waitingScreen, matchScreen].forEach(s => s.classList.remove('visible'));
-      screenEl.classList.add('visible');
-    }
-
-    // Auth listeners
-    btnGoogleSignIn.addEventListener('click', () => {
-      const provider = new firebase.auth.GoogleAuthProvider();
-      auth.signInWithPopup(provider).catch(err => alert('Sign-in error: ' + err.message));
-    });
-
-    btnSignOut.addEventListener('click', async () => {
-      await cancelWaiting();
-      await leaveMatchCleanup();
-      auth.signOut();
-    });
-
     auth.onAuthStateChanged(user => {
-      currentUser = user;
-      if (user) {
-        welcomeText.textContent = `Welcome, ${user.displayName || 'Player'}`;
-        userInfo.textContent = `UID: ${user.uid}`;
-        // presence
-        const presRef = db.ref('users/' + user.uid + '/presence');
-        presRef.set(true);
-        presRef.onDisconnect().remove();
-
-        // Listen for currentMatch path as secondary method (optional)
-        db.ref('users/' + user.uid + '/currentMatch').on('value', snap => {
-          const mid = snap.val();
-          if (mid) {
-            // someone assigned match via user node
-            enterMatch(mid);
-          }
-        });
-
-        showScreen(homeScreen);
-      } else {
-        showScreen(loginScreen);
-      }
-    });
-
-    // Start & Waiting logic (improved)
-    btnStartGame.addEventListener('click', async () => {
-      if (!currentUser) return alert('Please sign in.');
-      // push waiting entry
-      waitingRef = db.ref('waiting').push();
-      waitingKey = waitingRef.key;
-      await waitingRef.set({
-        uid: currentUser.uid,
-        name: currentUser.displayName || '',
-        ts: firebase.database.ServerValue.TIMESTAMP,
-        matchId: null
-      });
-      // ensure removal on disconnect
-      waitingRef.onDisconnect().remove();
-
-      // Listen to own waiting entry — this guarantees you'll detect when someone assigns matchId
-      if (waitingListener) waitingRef.off('value', waitingListener);
-      waitingListener = waitingRef.on('value', snap => {
-        const val = snap.val();
-        if (!val) return; // probably removed
-        if (val.matchId) {
-          // matched — enter match
-          enterMatch(val.matchId);
+        currentUser = user;
+        if (user) {
+            $('#user-avatar').attr('src', user.photoURL);
+            $('#user-name').text(user.displayName);
+            showScreen('home-screen');
+        } else {
+            showScreen('login-screen');
         }
-      });
+    });
 
-      showScreen(waitingScreen);
-      waitingInfo.textContent = 'You are waiting...';
+    $('#google-signin').on('click', function() {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        auth.signInWithPopup(provider);
+    });
 
-      // start watching waiting list to attempt pairing (only one listener)
-      if (!pairListener) {
-        pairListener = db.ref('waiting');
-        pairListener.on('value', snap => {
-          const waiting = snap.val() || {};
-          const keys = Object.keys(waiting);
-          // only try if there are at least 2 entries
-          if (keys.length >= 2) {
-            tryPairing();
-          }
+    $('#logout-btn').on('click', function() {
+        auth.signOut();
+    });
+
+    // ---- Game Matching Logic ----
+    let waitingRef = db.ref('waiting');
+    let gamesRef = db.ref('games');
+    let myGameId = null;
+    let myColor = null;
+    let gameListener = null;
+    let board = null;
+    let chess = null;
+    let opponent = null;
+
+    $('#start-game-btn').on('click', function() {
+        // Add self to waiting, but check for race condition
+        showScreen('waiting-screen');
+        waitingRef.transaction(waiting => {
+            if (!waiting) waiting = [];
+            if (!waiting.includes(currentUser.uid)) waiting.push(currentUser.uid);
+            return waiting;
         });
-      }
+        tryMatchPlayers();
     });
 
-    btnCancelWaiting.addEventListener('click', () => {
-      cancelWaiting();
+    // Cancel waiting (remove self from waiting list)
+    $('#cancel-wait').on('click', function() {
+        waitingRef.transaction(waiting => {
+            if (!waiting) return [];
+            return waiting.filter(uid => uid !== currentUser.uid);
+        });
+        showScreen('home-screen');
     });
 
-    async function cancelWaiting() {
-      if (waitingRef) {
-        try { await waitingRef.remove(); } catch (e) {}
-        if (waitingListener) { waitingRef.off('value', waitingListener); waitingListener = null; }
-        waitingRef = null;
-        waitingKey = null;
-      }
-      if (pairListener) {
-        pairListener.off();
-        pairListener = null;
-      }
-      showScreen(homeScreen);
+    // Try to match players atomically
+    function tryMatchPlayers() {
+        waitingRef.on('value', function(snapshot) {
+            let waiting = snapshot.val() || [];
+            if (waiting.length >= 2) {
+                // Atomically pop two players and create a match
+                waitingRef.transaction(waitingList => {
+                    if (!waitingList || waitingList.length < 2) return waitingList;
+                    // Get two players who are not already in a game
+                    let [p1, p2] = waitingList.slice(0,2);
+                    // Only proceed if current user is one of them
+                    if (![p1, p2].includes(currentUser.uid)) return waitingList;
+                    let remaining = waitingList.filter(uid => uid !== p1 && uid !== p2);
+                    // Create a new game
+                    let gameId = gamesRef.push().key;
+                    let white = Math.random() < 0.5 ? p1 : p2;
+                    let black = (white === p1 ? p2 : p1);
+                    let gameData = {
+                        id: gameId,
+                        white: { uid: white },
+                        black: { uid: black },
+                        fen: 'start',
+                        turn: 'w',
+                        status: 'playing',
+                        lastUpdate: firebase.database.ServerValue.TIMESTAMP
+                    };
+                    let updates = {};
+                    updates['games/' + gameId] = gameData;
+                    updates['waiting'] = remaining;
+                    db.ref().update(updates);
+                    return remaining;
+                });
+            }
+        });
+        // Listen for a game assigned to us
+        listenForMatch();
     }
 
-    // Pairing logic with lock + notifying both waiting entries explicitly
-    async function tryPairing() {
-      if (!currentUser) return;
-
-      const lockRef = db.ref('pairingLock');
-      lockRef.transaction(current => {
-        if (current === null) {
-          return currentUser.uid; // acquire lock
-        }
-        return; // already held
-      }, async (err, committed, snap) => {
-        if (err) return;
-        if (!committed) return; // couldn't acquire
-        // acquired lock
-        try {
-          // read ordered by timestamp to get oldest two
-          const waitingSnap = await db.ref('waiting').orderByChild('ts').once('value');
-          const waitingObj = waitingSnap.val() || {};
-          const entries = [];
-          waitingSnap.forEach(child => {
-            entries.push({ key: child.key, val: child.val() });
-          });
-          if (entries.length < 2) {
-            await db.ref('pairingLock').remove();
-            return;
-          }
-          // pick oldest two
-          const a = entries[0];
-          const b = entries[1];
-          // Create match
-          const newMatchRef = db.ref('matches').push();
-          const newMatchId = newMatchRef.key;
-
-          // default starting FEN and metadata
-          const startingChess = (typeof Chess !== 'undefined') ? new Chess() : null;
-          const startingFen = startingChess ? startingChess.fen() : 'start';
-
-          const players = {};
-          // assign colors deterministically: a => white, b => black
-          players['white'] = { uid: a.val.uid, name: a.val.name || '' };
-          players['black'] = { uid: b.val.uid, name: b.val.name || '' };
-
-          await newMatchRef.set({
-            fen: startingFen,
-            turn: 'w',
-            createdAt: firebase.database.ServerValue.TIMESTAMP,
-            players: players,
-            moves: {}
-          });
-
-          // Notify both waiting entries by setting matchId on each waiting node.
-          const updates = {};
-          updates['waiting/' + a.key + '/matchId'] = newMatchId;
-          updates['waiting/' + b.key + '/matchId'] = newMatchId;
-
-          // Also set users/{uid}/currentMatch as redundancy
-          updates['users/' + a.val.uid + '/currentMatch'] = newMatchId;
-          updates['users/' + b.val.uid + '/currentMatch'] = newMatchId;
-
-          await db.ref().update(updates);
-          // release lock
-          await db.ref('pairingLock').remove();
-        } catch (e) {
-          // release lock in any case
-          await db.ref('pairingLock').remove();
-        }
-      });
+    function listenForMatch() {
+        // Remove previous listeners
+        if (gameListener) gamesRef.off('child_added', gameListener);
+        gameListener = gamesRef.orderByChild('status').equalTo('playing').on('child_added', function(snapshot) {
+            let data = snapshot.val();
+            if (!data) return;
+            if ([data.white.uid, data.black.uid].includes(currentUser.uid)) {
+                // Both players will immediately go to game
+                startGame(snapshot.key, data);
+            }
+        });
     }
 
-    // ENTER MATCH (listens to match records + moves)
-    async function enterMatch(id) {
-      // cleanup any previous listeners
-      await leaveMatchCleanup();
+    function startGame(gameId, data) {
+        myGameId = gameId;
+        myColor = (data.white.uid === currentUser.uid) ? 'w' : 'b';
+        let opponentUid = (myColor === 'w') ? data.black.uid : data.white.uid;
+        // Get opponent info
+        db.ref('users/' + opponentUid).once('value').then(snap => {
+            opponent = snap.val();
+            // Fallback if user profile doesn't exist
+            if (!opponent) opponent = { displayName: 'Opponent', photoURL: '' };
+            showMatch(data);
+        });
+    }
 
-      matchId = id;
-      matchRef = db.ref('matches/' + matchId);
-      matchMovesRef = db.ref('matches/' + matchId + '/moves');
+    // Store player info on login
+    auth.onAuthStateChanged(user => {
+        if (user) {
+            db.ref('users/' + user.uid).set({
+                displayName: user.displayName,
+                photoURL: user.photoURL
+            });
+        }
+    });
 
-      // fetch match once
-      const snap = await matchRef.once('value');
-      const match = snap.val();
-      if (!match) {
-        alert('Match no longer exists.');
-        showScreen(homeScreen);
-        return;
-      }
+    // ------------- Chess Game UI and Logic -----------------
+    function showMatch(data) {
+        // Set player names and avatars
+        db.ref('users/' + data.white.uid).once('value').then(snap => {
+            let white = snap.val() || { displayName: 'White', photoURL: '' };
+            $('#white-name').text(white.displayName);
+            $('#white-avatar').attr('src', white.photoURL);
+        });
+        db.ref('users/' + data.black.uid).once('value').then(snap => {
+            let black = snap.val() || { displayName: 'Black', photoURL: '' };
+            $('#black-name').text(black.displayName);
+            $('#black-avatar').attr('src', black.photoURL);
+        });
 
-      // determine my color
-      if (match.players && match.players.white && match.players.white.uid === currentUser.uid) {
-        myColor = 'w';
-      } else if (match.players && match.players.black && match.players.black.uid === currentUser.uid) {
-        myColor = 'b';
-      } else {
-        myColor = 'spectator';
-      }
+        showScreen('game-screen');
+        $('#gameStatus').text('');
+        $('#match-status').text('You are playing as ' + (myColor === 'w' ? 'White' : 'Black'));
 
-      matchVs.textContent = `${match.players.white.name || 'White'} vs ${match.players.black.name || 'Black'}`;
-      matchStatus.textContent = `You are ${myColor === 'w' ? 'White' : myColor === 'b' ? 'Black' : 'Spectator'}`;
+        // Chessboard
+        if (board) {
+            board.destroy();
+        }
+        chess = new Chess();
+        if (data.fen && data.fen !== 'start') chess.load(data.fen);
 
-      // init chess.js game
-      if (!game) game = new Chess();
-      if (match.fen && game.validate_fen) {
-        // chess.js exposes validate_fen; try load
-        try { game.load(match.fen); } catch (e) { game.reset(); }
-      } else {
-        game.reset();
-      }
-
-      // initialize chessboard.js with custom pieceTheme to use your /piece folder
-      if (!board) {
         board = Chessboard('myBoard', {
-          draggable: true,
-          position: game.fen(),
-          onDragStart: onDragStart,
-          onDrop: onDrop,
-          onSnapEnd: onSnapEnd,
-          // pieceTheme: function(piece) { return 'piece/' + piece + '.svg'; } // alternative signature supported
-          pieceTheme: function(piece) {
-            // chessboard.js passes piece like 'wK','bQ' etc.
-            return 'piece/' + piece + '.svg';
-          }
+            draggable: true,
+            position: data.fen === 'start' ? 'start' : data.fen,
+            pieceTheme: function(piece) {
+                // piece is like 'wK', 'bQ'
+                return 'pieces/' + piece + '.svg';
+            },
+            onDragStart: onDragStart,
+            onDrop: onDrop,
+            onSnapEnd: onSnapEnd
         });
-      } else {
-        board.position(game.fen());
-      }
 
-      // Listen for match metadata updates (fen/turn)
-      matchListener = matchRef.on('value', snap => {
-        const data = snap.val();
-        if (!data) return;
-        fenDisplay.textContent = data.fen || '';
-        turnIndicator.textContent = data.turn === 'w' ? 'White' : 'Black';
-      });
-
-      // listen for moves appended
-      matchMovesChildListener = matchMovesRef.on('child_added', snap => {
-        const mv = snap.val();
-        if (!mv) return;
-        // don't re-apply moves authored by ourselves twice:
-        if (mv.authorUid === currentUser.uid) return;
-        applyRemoteMove(mv);
-      });
-
-      showScreen(matchScreen);
+        // Listen for game updates
+        gamesRef.child(myGameId).on('value', function(snapshot) {
+            let gameData = snapshot.val();
+            if (!gameData) {
+                // game deleted
+                leaveGame();
+                return;
+            }
+            if (gameData.status === 'ended') {
+                $('#gameStatus').text('Game Ended');
+                board.position(gameData.fen === 'start' ? 'start' : gameData.fen);
+                gamesRef.child(myGameId).off();
+                return;
+            }
+            // Update board if FEN changes
+            if (chess.fen() !== gameData.fen && gameData.fen) {
+                chess.load(gameData.fen);
+                board.position(gameData.fen === 'start' ? 'start' : gameData.fen);
+            }
+            updateStatus();
+        });
     }
 
-    // Chessboard callbacks
+    // Chessboard.js handlers
     function onDragStart(source, piece, position, orientation) {
-      if (!game) return false;
-      if (game.game_over()) return false;
-      // ensure it's player's turn
-      if (game.turn() === 'w' && piece.search(/^b/) !== -1) return false;
-      if (game.turn() === 'b' && piece.search(/^w/) !== -1) return false;
-      if (myColor !== game.turn()) return false; // spectator or wrong side can't move
-      return true;
+        // Only allow drag if it's your turn and your piece
+        if (chess.game_over()) return false;
+        if ((chess.turn() === 'w' && myColor !== 'w') || (chess.turn() === 'b' && myColor !== 'b')) {
+            return false;
+        }
+        if ((myColor === 'w' && piece.search(/^w/) === -1) || (myColor === 'b' && piece.search(/^b/) === -1)) {
+            return false;
+        }
     }
 
     function onDrop(source, target) {
-      // attempt move
-      const move = game.move({ from: source, to: target, promotion: 'q' });
-      if (move === null) return 'snapback';
+        let move = chess.move({
+            from: source,
+            to: target,
+            promotion: 'q'
+        });
+        if (move === null) return 'snapback';
 
-      // update board
-      board.position(game.fen());
-
-      // push move to DB
-      const mv = {
-        from: move.from,
-        to: move.to,
-        piece: move.piece,
-        san: move.san,
-        flags: move.flags,
-        color: move.color,
-        promotion: move.promotion || null,
-        authorUid: currentUser.uid,
-        ts: firebase.database.ServerValue.TIMESTAMP
-      };
-      matchMovesRef.push(mv).catch(e => console.warn('push move failed', e));
-
-      // update match fen & turn
-      matchRef.update({ fen: game.fen(), turn: game.turn() }).catch(e => console.warn('update match failed', e));
+        // Update in DB, but only one update at a time to avoid overwriting
+        let update = {
+            fen: chess.fen(),
+            turn: chess.turn(),
+            lastUpdate: firebase.database.ServerValue.TIMESTAMP
+        };
+        // Check game end
+        if (chess.game_over()) {
+            update.status = "ended";
+        }
+        gamesRef.child(myGameId).update(update);
+        updateStatus();
     }
 
     function onSnapEnd() {
-      board.position(game.fen());
+        board.position(chess.fen());
     }
 
-    // Apply remote move safely
-    function applyRemoteMove(moveObj) {
-      if (!game) return;
-      // apply move by from/to/promotion
-      const m = game.move({ from: moveObj.from, to: moveObj.to, promotion: moveObj.promotion || 'q' });
-      if (m) {
-        board.position(game.fen());
-        matchRef.update({ fen: game.fen(), turn: game.turn() }).catch(()=>{});
-      }
-    }
-
-    // Leave match + cleanup listeners
-    async function leaveMatchCleanup() {
-      try {
-        if (matchListener && matchRef) { matchRef.off('value', matchListener); matchListener = null; }
-        if (matchMovesChildListener && matchMovesRef) { matchMovesRef.off('child_added', matchMovesChildListener); matchMovesChildListener = null; }
-        if (matchRef && currentUser) {
-          // remove users/{uid}/currentMatch if it's pointing to this match
-          const userMatchRef = db.ref('users/' + currentUser.uid + '/currentMatch');
-          const snap = await userMatchRef.once('value');
-          if (snap.val() === matchId) {
-            userMatchRef.remove().catch(()=>{});
-          }
-        }
-      } catch (e) {}
-      matchId = null;
-      matchRef = null;
-      matchMovesRef = null;
-      // don't remove board/game; keep them for new match
-      showScreen(homeScreen);
-    }
-
-    btnLeaveMatch.addEventListener('click', async () => {
-      await leaveMatchCleanup();
-      // Also remove waiting entry if any
-      await cancelWaiting();
-    });
-
-    // When page unload remove waiting and presence
-    window.addEventListener('beforeunload', async () => {
-      if (waitingRef) try { await waitingRef.remove(); } catch (e) {}
-      if (currentUser) {
-        try { await db.ref('users/' + currentUser.uid + '/presence').remove(); } catch (e) {}
-        try { await db.ref('users/' + currentUser.uid + '/currentMatch').remove(); } catch (e) {}
-      }
-    });
-
-    // Resign button (simple implementation: write a result node and remove match)
-    btnResign.addEventListener('click', async () => {
-      if (!matchId || !currentUser) return;
-      const result = {
-        resignedBy: currentUser.uid,
-        ts: firebase.database.ServerValue.TIMESTAMP
-      };
-      await db.ref('matches/' + matchId + '/result').set(result);
-      // optional: remove match after short delay
-      setTimeout(()=> db.ref('matches/' + matchId).remove().catch(()=>{}), 2000);
-      await leaveMatchCleanup();
-    });
-
-    // Ensure board variable exists if loaded before chess.js:
-    (function ensureChessLoaded(){
-      // If chess.js hasn't loaded yet, wait
-      function initIfReady(){
-        if (typeof Chess !== 'undefined') {
-          if (!game) game = new Chess();
-          // nothing else required; board instantiation happens when match starts
+    function updateStatus() {
+        let status = "";
+        if (chess.in_checkmate()) {
+            status = "Checkmate! " + (chess.turn() === 'w' ? "Black" : "White") + " wins.";
+        } else if (chess.in_draw()) {
+            status = "Draw!";
+        } else if (chess.in_stalemate()) {
+            status = "Stalemate!";
+        } else if (chess.in_check()) {
+            status = "Check!";
         } else {
-          setTimeout(initIfReady, 150);
+            status = (chess.turn() === myColor) ? "Your turn" : "Opponent's turn";
         }
-      }
-      initIfReady();
-    })();
+        $('#gameStatus').text(status);
+    }
 
-  </script>
+    // Leave game and cleanup
+    $('#leave-game-btn').on('click', leaveGame);
+    function leaveGame() {
+        if (myGameId) {
+            gamesRef.child(myGameId).off();
+            gamesRef.child(myGameId).remove();
+        }
+        myGameId = null;
+        myColor = null;
+        chess = null;
+        board && board.destroy();
+        board = null;
+        showScreen('home-screen');
+    }
+
+    // Cleanup on sign out or window close
+    window.addEventListener('beforeunload', function() {
+        if (myGameId) leaveGame();
+        waitingRef.transaction(waiting => {
+            if (!waiting) return [];
+            return waiting.filter(uid => uid !== (currentUser && currentUser.uid));
+        });
+    });
+    auth.onAuthStateChanged(user => {
+        if (!user && myGameId) leaveGame();
+    });
+    </script>
 </body>
-	</html>
+		</html>
