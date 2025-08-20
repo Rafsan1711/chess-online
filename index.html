@@ -13,6 +13,7 @@
           href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css"
           crossorigin="anonymous">
 
+    <!-- Custom CSS (Dark mode & nicer board colors) -->
     <style>
         :root{
             --bg: #0e1113;
@@ -25,14 +26,11 @@
             --highlight-capture: #fb6b6b66;
         }
         html,body{
-            min-height:100vh;
+            height:100%;
             background: linear-gradient(180deg,var(--bg), #071014 90%);
             color: #e7eef0;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-            overscroll-behavior-y: contain;
         }
-        body { overflow: hidden; }
-
         a { color: var(--accent); }
         .container.centered { margin-top: 48px; }
         .hidden { display: none !important; }
@@ -44,13 +42,15 @@
             border: 2px solid rgba(255,255,255,0.06);
             background: #0b0d0e;
         }
-        #myBoard { margin: 0 auto; max-width: 420px; touch-action: none; }
-        /* chessboard squares */
+        #myBoard { margin: 12px auto; max-width: 480px; }
+        /* chessboard squares (override chessboard.js default) */
         .white-1e1d7 { background-color: var(--light-square) !important; }
         .black-3c85d { background-color: var(--dark-square) !important; }
+        /* highlight styles used by the original code */
         .highlight-white { box-shadow: inset 0 0 0 4px rgba(120,200,255,0.08); }
         .highlight-black { box-shadow: inset 0 0 0 4px rgba(160,120,255,0.08); }
         .highlight-hint { box-shadow: inset 0 0 0 4px rgba(120,255,180,0.08); }
+
         /* board container look */
         .board {
             border-radius: 8px;
@@ -58,72 +58,19 @@
             background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));
             padding: 6px;
         }
+
+        /* buttons */
         .btn { border-radius: 8px; }
         .btn-danger { background: #ef476f; border: none; }
         .btn-success { background: #06d6a0; border: none; color: #032b26; }
         .btn-secondary { background: #1f2a2c; border: none; color: #cfe9e2; }
-        /* toggle group for mode */
-        .toggle-group {
-            display: flex;
-            gap: 10px;
-            margin-top: 24px;
-            justify-content: center;
+
+        /* small responsive tweaks */
+        @media (max-width: 767px) {
+            #myBoard { max-width: 320px; }
+            .avatar { width: 40px; height: 40px; }
         }
-        .toggle-btn {
-            background: var(--panel);
-            border: 2px solid var(--muted);
-            color: var(--muted);
-            font-weight: 600;
-            border-radius: 8px;
-            padding: 10px 32px;
-            min-width: 110px;
-            cursor: pointer;
-            transition: all 0.17s;
-        }
-        .toggle-btn.selected, .toggle-btn:active {
-            background: var(--accent);
-            color: #1c2326;
-            border-color: var(--accent);
-            box-shadow: 0 0 0 2px #28e7c2b9;
-        }
-        /* clock style */
-        .chess-clock {
-            font-family: "Roboto Mono", "Menlo", "monospace";
-            font-size: 2rem;
-            font-weight: 700;
-            color: #e7eef0;
-            background: #13181b;
-            border-radius: 8px;
-            padding: 4px 18px;
-            margin-top: 6px;
-            letter-spacing: 1px;
-            border: 2px solid #222b2e;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.10);
-            display: inline-block;
-            min-width: 140px;
-        }
-        .chess-clock.active {
-            border-color: var(--accent);
-            color: #06d6a0;
-            background: #1d2b25;
-        }
-        .clock-label {
-            font-size: 1rem;
-            color: var(--muted);
-            margin-top: 2px;
-            margin-bottom: 0;
-        }
-        /* Responsive: force fit for chess area */
-        @media (max-width: 992px) {
-            #game-screen .row {
-                flex-direction: column-reverse !important;
-            }
-            #myBoard { max-width: 96vw; }
-        }
-        @media (max-width: 600px) {
-            .avatar { width: 32px; height: 32px; }
-            .chess-clock { font-size: 1.2rem; min-width: 90px; }
-        }
+
         /* modal custom */
         .modal-content {
             background: linear-gradient(180deg, #0b1113, #071014);
@@ -135,6 +82,7 @@
     </style>
 </head>
 <body>
+    <!-- Screens -->
     <!-- Login Screen -->
     <div id="login-screen" class="container centered">
         <h2>Sign in to Play Chess</h2>
@@ -149,10 +97,6 @@
             <img id="user-avatar" class="avatar mb-2" src="" alt="avatar">
             <div style="margin-top:8px;">Welcome, <span id="user-name"></span></div>
         </div>
-        <div class="toggle-group">
-            <button id="btn-blitz" class="toggle-btn selected" data-mode="blitz">Blitz (5 min)</button>
-            <button id="btn-rapid" class="toggle-btn" data-mode="rapid">Rapid (10 min)</button>
-        </div>
         <button id="start-game-btn" class="btn btn-success mt-4">Start Game</button>
         <button id="logout-btn" class="btn btn-secondary ml-2">Logout</button>
     </div>
@@ -165,34 +109,31 @@
     </div>
 
     <!-- Chess Game Screen -->
-    <div id="game-screen" class="container hidden" style="max-width: 900px; height: 100vh; padding-top: 14px;">
-        <div class="row" style="height: 100%;">
-            <div class="col-lg-6 d-flex flex-column justify-content-center align-items-center" style="height: 100%;">
-                <div class="mb-2" style="display: flex; align-items: center;gap:12px;">
-                    <img id="white-avatar" class="avatar" src="">
-                    <b id="white-name"></b> <span class="ml-1 text-muted">(White)</span>
+    <div id="game-screen" class="container hidden">
+        <div class="row my-3">
+            <div class="col-12 text-center">
+                <h3 id="game-title">Chess Match</h3>
+                <div id="match-status" style="margin-top:6px;color:var(--muted);"></div>
+            </div>
+        </div>
+        <div class="row align-items-center">
+            <div class="col-md-6">
+                <div class="mb-2">
+                    <span><img id="white-avatar" class="avatar" src=""> <b id="white-name"></b> (White)</span>
                 </div>
-                <p class="clock-label">White's Clock</p>
-                <div id="white-clock" class="chess-clock mb-3"></div>
-                <div class="mb-2" style="display: flex; align-items: center;gap:12px;">
-                    <img id="black-avatar" class="avatar" src="">
-                    <b id="black-name"></b> <span class="ml-1 text-muted">(Black)</span>
+                <div class="mb-2">
+                    <span><img id="black-avatar" class="avatar" src=""> <b id="black-name"></b> (Black)</span>
                 </div>
-                <p class="clock-label">Black's Clock</p>
-                <div id="black-clock" class="chess-clock"></div>
                 <div id="gameStatus" class="my-2"></div>
                 <div class="mt-2">
                     <button id="resign-btn" class="btn btn-danger">Resign</button>
                     <button id="abort-btn" class="btn btn-secondary ml-2">Abort</button>
                 </div>
             </div>
-            <div class="col-lg-6 d-flex justify-content-center align-items-center" style="height: 100%;">
-                <div class="board" style="padding: 10px;">
-                    <div id="myBoard"></div>
-                </div>
+            <div class="col-md-6">
+                <div id="myBoard"></div>
             </div>
         </div>
-        <div class="row"><div class="col text-center"><div id="match-status" style="margin-top:10px;color:var(--muted);"></div></div></div>
     </div>
 
     <!-- Result Modal (shown when opponent resigns/aborts or game ended with a reason) -->
@@ -217,15 +158,25 @@
 
     <!-- Firebase & Dependencies -->
     <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+
+    <!-- Bootstrap JS (for modal) -->
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.bundle.min.js"></script>
-    <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js" crossorigin="anonymous"></script>
+
+    <!-- Chessboard.js -->
+    <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"
+        crossorigin="anonymous"></script>
+
+    <!-- Firebase -->
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+    <!-- Chess.js (local file, must be present in same directory) -->
     <script src="js/chess.js"></script>
 
     <script>
     // ----------------- CONFIGURE THIS SECTION -------------------
+    // Replace with your Firebase project config (already in your file).
     const firebaseConfig = {
         apiKey: "AIzaSyD8z3e5j9y48wJkyU89F7M19cDfxQ4P8uo",
         authDomain: "chess-online-ebc1f.firebaseapp.com",
@@ -245,11 +196,6 @@
     function showScreen(screen) {
         $('#login-screen, #home-screen, #waiting-screen, #game-screen').addClass('hidden');
         $(`#${screen}`).removeClass('hidden');
-        if(screen === "game-screen") {
-            document.body.style.overflow = "hidden";
-        } else {
-            document.body.style.overflow = "";
-        }
     }
 
     // ---- Auth ----
@@ -274,15 +220,6 @@
         auth.signOut();
     });
 
-    // ---- Mode selection (blitz/rapid) ----
-    let selectedMode = "blitz"; // default
-
-    $('.toggle-btn').on('click', function(){
-        $('.toggle-btn').removeClass('selected');
-        $(this).addClass('selected');
-        selectedMode = $(this).data('mode');
-    });
-
     // ---- Game Matching Logic ----
     let waitingRef = db.ref('waiting');
     let gamesRef = db.ref('games');
@@ -293,27 +230,12 @@
     let chess = null;
     let opponent = null;
 
-    // Chess clock
-    let clockInterval = null;
-    let myClock = 0, oppClock = 0;
-    let lastMoveTimestamp = null;
-    let clockActive = false;
-    let isTimeout = false;
-    let lastTurn = null;
-
-    // time in milliseconds
-    function modeTime(mode) {
-        return mode === "blitz" ? 5*60*1000 : 10*60*1000;
-    }
-
     $('#start-game-btn').on('click', function() {
-        // Add self to waiting list with mode info
+        // Add self to waiting, but check for race condition
         showScreen('waiting-screen');
         waitingRef.transaction(waiting => {
             if (!waiting) waiting = [];
-            // Remove old self if exists
-            waiting = waiting.filter(item => !(item && item.uid === currentUser.uid));
-            waiting.push({uid: currentUser.uid, mode: selectedMode});
+            if (!waiting.includes(currentUser.uid)) waiting.push(currentUser.uid);
             return waiting;
         });
         tryMatchPlayers();
@@ -323,47 +245,36 @@
     $('#cancel-wait').on('click', function() {
         waitingRef.transaction(waiting => {
             if (!waiting) return [];
-            return waiting.filter(item => !(item && item.uid === currentUser.uid));
+            return waiting.filter(uid => uid !== currentUser.uid);
         });
         showScreen('home-screen');
     });
 
-    // Try to match players with same mode
+    // Try to match players atomically
     function tryMatchPlayers() {
         waitingRef.on('value', function(snapshot) {
             let waiting = snapshot.val() || [];
-            // Only match with same mode!
-            let myEntry = waiting.find(item => item && item.uid === currentUser.uid);
-            if(!myEntry) return;
-            let candidates = waiting.filter(item => item && item.mode === myEntry.mode);
-            if (candidates.length >= 2) {
+            if (waiting.length >= 2) {
+                // Atomically pop two players and create a match
                 waitingRef.transaction(waitingList => {
-                    if (!waitingList) return [];
-                    let myIdx = waitingList.findIndex(item => item && item.uid === currentUser.uid);
-                    if(myIdx === -1) return waitingList;
-                    // find another with same mode
-                    let anotherIdx = waitingList.findIndex((item, idx) => idx!==myIdx && item && item.mode === myEntry.mode);
-                    if(anotherIdx === -1) return waitingList;
-                    let p1 = waitingList[myIdx].uid, p2 = waitingList[anotherIdx].uid;
-                    let mode = waitingList[myIdx].mode;
-                    let remaining = waitingList.filter((item, idx) => idx!==myIdx && idx!==anotherIdx);
+                    if (!waitingList || waitingList.length < 2) return waitingList;
+                    // Get two players who are not already in a game
+                    let [p1, p2] = waitingList.slice(0,2);
+                    // Only proceed if current user is one of them
+                    if (![p1, p2].includes(currentUser.uid)) return waitingList;
+                    let remaining = waitingList.filter(uid => uid !== p1 && uid !== p2);
+                    // Create a new game
                     let gameId = gamesRef.push().key;
                     let white = Math.random() < 0.5 ? p1 : p2;
                     let black = (white === p1 ? p2 : p1);
-                    let t = modeTime(mode);
-                    let now = Date.now();
                     let gameData = {
                         id: gameId,
                         white: { uid: white },
                         black: { uid: black },
                         fen: 'start',
                         turn: 'w',
-                        mode: mode,
                         status: 'playing',
-                        whiteClock: t,
-                        blackClock: t,
-                        lastUpdate: firebase.database.ServerValue.TIMESTAMP,
-                        lastMoveTime: now
+                        lastUpdate: firebase.database.ServerValue.TIMESTAMP
                     };
                     let updates = {};
                     updates['games/' + gameId] = gameData;
@@ -373,15 +284,18 @@
                 });
             }
         });
+        // Listen for a game assigned to us
         listenForMatch();
     }
 
     function listenForMatch() {
+        // Remove previous listeners
         if (gameListener) gamesRef.off('child_added', gameListener);
         gameListener = gamesRef.orderByChild('status').equalTo('playing').on('child_added', function(snapshot) {
             let data = snapshot.val();
             if (!data) return;
             if ([data.white.uid, data.black.uid].includes(currentUser.uid)) {
+                // Both players will immediately go to game
                 startGame(snapshot.key, data);
             }
         });
@@ -391,8 +305,10 @@
         myGameId = gameId;
         myColor = (data.white.uid === currentUser.uid) ? 'w' : 'b';
         let opponentUid = (myColor === 'w') ? data.black.uid : data.white.uid;
+        // Get opponent info
         db.ref('users/' + opponentUid).once('value').then(snap => {
             opponent = snap.val();
+            // Fallback if user profile doesn't exist
             if (!opponent) opponent = { displayName: 'Opponent', photoURL: '' };
             showMatch(data);
         });
@@ -409,10 +325,8 @@
     });
 
     // ------------- Chess Game UI and Logic -----------------
-    let clickFrom = null;
-
     function showMatch(data) {
-        // Set player info
+        // Set player names and avatars
         db.ref('users/' + data.white.uid).once('value').then(snap => {
             let white = snap.val() || { displayName: 'White', photoURL: '' };
             $('#white-name').text(white.displayName);
@@ -435,20 +349,12 @@
         chess = new Chess();
         if (data.fen && data.fen !== 'start') chess.load(data.fen);
 
-        // Set up clock
-        let t = modeTime(data.mode);
-        myClock = (myColor === 'w') ? (data.whiteClock ?? t) : (data.blackClock ?? t);
-        oppClock = (myColor === 'w') ? (data.blackClock ?? t) : (data.whiteClock ?? t);
-        lastMoveTimestamp = data.lastMoveTime || Date.now();
-        lastTurn = data.turn;
-        isTimeout = false;
-        updateClocksDisplay(data.turn);
-
         board = Chessboard('myBoard', {
             draggable: true,
             orientation: (myColor === 'w' ? 'white' : 'black'),
             position: data.fen === 'start' ? 'start' : data.fen,
             pieceTheme: function(piece) {
+                // piece is like 'wK', 'bQ'
                 return 'pieces/' + piece + '.svg';
             },
             onDragStart: onDragStart,
@@ -456,47 +362,20 @@
             onSnapEnd: onSnapEnd
         });
 
-        // Click-to-move feature
-        $('#myBoard').off('click').on('click', '.square-55d63', function(e){
-            if (!myGameId) return;
-            if (chess.game_over()) return;
-            if ((chess.turn() === 'w' && myColor !== 'w') || (chess.turn() === 'b' && myColor !== 'b')) return;
-            let square = $(this).attr('data-square');
-            if (!clickFrom) {
-                // select from-square
-                let piece = chess.get(square);
-                if (piece && piece.color === myColor) {
-                    clickFrom = square;
-                    highlightSquare(square, true);
-                }
-            } else if (clickFrom === square) {
-                // deselect
-                highlightSquare(clickFrom, false);
-                clickFrom = null;
-            } else {
-                // try move
-                let move = chess.move({from: clickFrom, to: square, promotion: 'q'});
-                highlightSquare(clickFrom, false);
-                clickFrom = null;
-                if (move === null) {
-                    // illegal
-                    return;
-                }
-                sendMoveToDB();
-            }
-        });
-
         // Listen for game updates
         gamesRef.child(myGameId).on('value', function(snapshot) {
             let gameData = snapshot.val();
             if (!gameData) {
+                // game deleted
+                // treat as abort (if we still have myGameId) to avoid confusion
                 if (myGameId) {
                     showResultModal({ type: 'abort', by: null, info: 'Game removed' });
                     cleanupAfterGame();
                 }
                 return;
             }
-            // Ended by resign/abort/timeout/gameover
+
+            // If ended with a result, show a modal describing the reason (resign/abort)
             if (gameData.status === 'ended') {
                 if (gameData.result) {
                     showResultModal(gameData.result);
@@ -508,31 +387,25 @@
                     chess.load(gameData.fen);
                     board.position(gameData.fen === 'start' ? 'start' : gameData.fen);
                 }
+                // remove realtime listener for this game (we keep data in DB so opponent can see modal)
                 gamesRef.child(myGameId).off();
+                // cleanup local state after letting user see modal
                 cleanupAfterGame();
-                stopClock();
                 return;
             }
 
-            // Update board if needed
+            // Update board if FEN changes
             if (chess.fen() !== gameData.fen && gameData.fen) {
                 chess.load(gameData.fen);
                 board.position(gameData.fen === 'start' ? 'start' : gameData.fen);
             }
-            // Update clock values
-            myClock = (myColor === 'w') ? gameData.whiteClock : gameData.blackClock;
-            oppClock = (myColor === 'w') ? gameData.blackClock : gameData.whiteClock;
-            lastMoveTimestamp = gameData.lastMoveTime || Date.now();
-            lastTurn = gameData.turn;
-            updateClocksDisplay(gameData.turn);
             updateStatus();
-            // Start local clock
-            startClock(gameData.turn);
         });
 
-        // Resign/abort buttons
+        // Hook up resign/abort buttons
         $('#resign-btn').off('click').on('click', function() {
             if (!myGameId) return;
+            // mark game ended with resign reason and winner = opponent
             gamesRef.child(myGameId).once('value').then(snap => {
                 let d = snap.val();
                 if (!d) return;
@@ -548,16 +421,19 @@
                     result: result,
                     lastUpdate: firebase.database.ServerValue.TIMESTAMP
                 });
+                // show immediate local modal for clarity
                 showResultModal(result);
+                // cleanup local after modal
                 cleanupAfterGame();
-                stopClock();
             });
         });
+
         $('#abort-btn').off('click').on('click', function() {
             if (!myGameId) return;
             gamesRef.child(myGameId).once('value').then(snap => {
                 let d = snap.val();
                 if (!d) return;
+                let opponentUid = (d.white.uid === currentUser.uid) ? d.black.uid : d.white.uid;
                 let result = {
                     type: 'abort',
                     by: currentUser.uid,
@@ -571,195 +447,52 @@
                 });
                 showResultModal(result);
                 cleanupAfterGame();
-                stopClock();
             });
         });
-        // Start clock
-        startClock(data.turn);
     }
 
     // Chessboard.js handlers
     function onDragStart(source, piece, position, orientation) {
+        // Only allow drag if it's your turn and your piece
         if (chess.game_over()) return false;
-        if ((chess.turn() === 'w' && myColor !== 'w') || (chess.turn() === 'b' && myColor !== 'b')) return false;
-        if ((myColor === 'w' && piece.search(/^w/) === -1) || (myColor === 'b' && piece.search(/^b/) === -1)) return false;
-    }
-    function onDrop(source, target) {
-        if (clickFrom) { highlightSquare(clickFrom, false); clickFrom = null; }
-        let move = chess.move({ from: source, to: target, promotion: 'q' });
-        if (move === null) return 'snapback';
-        sendMoveToDB();
-    }
-    function onSnapEnd() {
-        board.position(chess.fen());
-    }
-    function highlightSquare(square, on) {
-        let $sq = $('#myBoard .square-' + square);
-        if (on) $sq.addClass('highlight-hint');
-        else $sq.removeClass('highlight-hint');
-    }
-
-    // Move sync to DB with clock update
-    function sendMoveToDB() {
-        if (!myGameId) return;
-        let now = Date.now();
-        gamesRef.child(myGameId).once('value').then(snap => {
-            let data = snap.val();
-            if (!data) return;
-            let mode = data.mode || 'blitz';
-            let t = modeTime(mode);
-            // Calculate updated clocks
-            let prevWhite = data.whiteClock ?? t;
-            let prevBlack = data.blackClock ?? t;
-            let elapsed = now - (data.lastMoveTime || now);
-            let turn = data.turn;
-            let whiteClock = prevWhite, blackClock = prevBlack;
-            if (turn === "w") {
-                whiteClock -= elapsed;
-            } else {
-                blackClock -= elapsed;
-            }
-            // If time out, end game immediately
-            if (whiteClock <= 0) {
-                let res = {
-                    type: 'timeout',
-                    by: data.white.uid,
-                    winner: data.black.uid,
-                    info: 'White lost on time!'
-                };
-                gamesRef.child(myGameId).update({
-                    status: 'ended',
-                    fen: chess.fen(),
-                    result: res,
-                    lastUpdate: firebase.database.ServerValue.TIMESTAMP,
-                    whiteClock: 0,
-                    blackClock: blackClock < 0 ? 0 : blackClock,
-                    lastMoveTime: now
-                });
-                showResultModal(res);
-                cleanupAfterGame();
-                stopClock();
-                return;
-            }
-            if (blackClock <= 0) {
-                let res = {
-                    type: 'timeout',
-                    by: data.black.uid,
-                    winner: data.white.uid,
-                    info: 'Black lost on time!'
-                };
-                gamesRef.child(myGameId).update({
-                    status: 'ended',
-                    fen: chess.fen(),
-                    result: res,
-                    lastUpdate: firebase.database.ServerValue.TIMESTAMP,
-                    whiteClock: whiteClock < 0 ? 0 : whiteClock,
-                    blackClock: 0,
-                    lastMoveTime: now
-                });
-                showResultModal(res);
-                cleanupAfterGame();
-                stopClock();
-                return;
-            }
-            // Normal move update
-            let update = {
-                fen: chess.fen(),
-                turn: chess.turn(),
-                lastUpdate: firebase.database.ServerValue.TIMESTAMP,
-                whiteClock: whiteClock < 0 ? 0 : whiteClock,
-                blackClock: blackClock < 0 ? 0 : blackClock,
-                lastMoveTime: now
-            };
-            if (chess.game_over()) {
-                let who = null, winText = '';
-                if (chess.in_checkmate()) {
-                    who = (chess.turn() === 'w') ? data.black.uid : data.white.uid;
-                    winText = ((chess.turn() === 'w') ? "Black" : "White") + ' wins by checkmate!';
-                }
-                update.status = "ended";
-                update.result = {
-                    type: 'game_over',
-                    by: null,
-                    winner: who,
-                    info: winText || 'Game finished (checkmate/draw/stalemate)'
-                };
-            }
-            gamesRef.child(myGameId).update(update);
-            updateClocksDisplay(chess.turn());
-        });
-    }
-
-    // Clock logic
-    function msToClock(ms) {
-        ms = Math.max(0, ms);
-        let m = Math.floor(ms/60000);
-        let s = Math.floor((ms%60000)/1000);
-        return `${m}:${s<10?'0':''}${s}`;
-    }
-    function updateClocksDisplay(turn) {
-        $('#white-clock').text(msToClock(myColor==='w'?myClock:oppClock)).toggleClass('active', turn==='w' && myColor==='w' || turn==='b' && myColor==='b');
-        $('#black-clock').text(msToClock(myColor==='b'?myClock:oppClock)).toggleClass('active', turn==='b' && myColor==='b' || turn==='w' && myColor==='w');
-        // Also update if opp
-        if (myColor === 'w') {
-            $('#white-clock').text(msToClock(myClock));
-            $('#black-clock').text(msToClock(oppClock));
-        } else {
-            $('#white-clock').text(msToClock(oppClock));
-            $('#black-clock').text(msToClock(myClock));
+        if ((chess.turn() === 'w' && myColor !== 'w') || (chess.turn() === 'b' && myColor !== 'b')) {
+            return false;
+        }
+        if ((myColor === 'w' && piece.search(/^w/) === -1) || (myColor === 'b' && piece.search(/^b/) === -1)) {
+            return false;
         }
     }
-    function startClock(turn) {
-        stopClock();
-        clockActive = true;
-        let last = Date.now();
-        clockInterval = setInterval(function(){
-            if (!clockActive) return;
-            let now = Date.now();
-            let dt = now - last;
-            last = now;
-            if ((turn === "w" && myColor === "w") || (turn === "b" && myColor === "b")) {
-                myClock -= dt;
-                if (myClock < 0) myClock = 0;
-            } else {
-                oppClock -= dt;
-                if (oppClock < 0) oppClock = 0;
-            }
-            updateClocksDisplay(turn);
-            // If time out, push result
-            if (!isTimeout && myClock <= 0) {
-                isTimeout = true;
-                gamesRef.child(myGameId).once('value').then(snap => {
-                    let data = snap.val();
-                    if (!data) return;
-                    let whoLost = myColor==='w'?data.white.uid:data.black.uid;
-                    let winner = myColor==='w'?data.black.uid:data.white.uid;
-                    let res = {
-                        type: 'timeout',
-                        by: whoLost,
-                        winner: winner,
-                        info: (myColor==='w'?"White":"Black")+" lost on time!"
-                    };
-                    gamesRef.child(myGameId).update({
-                        status: 'ended',
-                        fen: chess.fen(),
-                        result: res,
-                        lastUpdate: firebase.database.ServerValue.TIMESTAMP,
-                        whiteClock: myColor==='w'?0:oppClock,
-                        blackClock: myColor==='b'?0:oppClock,
-                        lastMoveTime: now
-                    });
-                });
-                showResultModal({ type: 'timeout', by: currentUser.uid, winner: null, info: "You lost on time!" });
-                cleanupAfterGame();
-                stopClock();
-            }
-        }, 200);
+
+    function onDrop(source, target) {
+        let move = chess.move({
+            from: source,
+            to: target,
+            promotion: 'q'
+        });
+        if (move === null) return 'snapback';
+
+        // Update in DB, but only one update at a time to avoid overwriting
+        let update = {
+            fen: chess.fen(),
+            turn: chess.turn(),
+            lastUpdate: firebase.database.ServerValue.TIMESTAMP
+        };
+        // Check game end
+        if (chess.game_over()) {
+            update.status = "ended";
+            update.result = {
+                type: 'game_over',
+                by: null,
+                winner: null,
+                info: 'Game finished (checkmate/draw/stalemate)'
+            };
+        }
+        gamesRef.child(myGameId).update(update);
+        updateStatus();
     }
-    function stopClock() {
-        clockActive = false;
-        if (clockInterval) clearInterval(clockInterval);
-        clockInterval = null;
+
+    function onSnapEnd() {
+        board.position(chess.fen());
     }
 
     function updateStatus() {
@@ -778,7 +511,7 @@
         $('#gameStatus').text(status);
     }
 
-    // Show a friendly modal when game ended by resign/abort/timeout/other
+    // Show a friendly modal when game ended by resign/abort/other
     function showResultModal(result) {
         let body = '';
         if (!result) {
@@ -795,21 +528,17 @@
             } else {
                 body = 'Your opponent aborted the game.';
             }
-        } else if (result.type === 'timeout') {
-            if (result.by === currentUser.uid) {
-                body = 'You lost on time!';
-            } else {
-                body = 'Your opponent lost on time! You win!';
-            }
         } else if (result.type === 'game_over') {
             body = result.info || 'Game finished.';
         } else {
+            // generic
             body = result.info || 'Game ended.';
         }
         $('#resultModalBody').text(body);
         $('#resultModal').modal({backdrop: 'static', keyboard: false});
     }
 
+    // Cleanup local state after a match finishes (keep DB entry so opponent sees modal)
     function cleanupAfterGame() {
         myGameId = null;
         myColor = null;
@@ -818,13 +547,13 @@
             board.destroy();
             board = null;
         }
-        stopClock();
+        // Return to home screen after small delay so user sees modal
         setTimeout(function() {
             showScreen('home-screen');
-        }, 500);
+        }, 300);
     }
 
-    // If user closes window while in a game, abort
+    // If user closes window while in a game, attempt to mark as abort (best-effort)
     window.addEventListener('beforeunload', function(e) {
         if (myGameId && currentUser) {
             try {
@@ -839,21 +568,24 @@
                     result: result,
                     lastUpdate: firebase.database.ServerValue.TIMESTAMP
                 });
-            } catch (err) {}
+            } catch (err) {
+                // nothing to do; best-effort
+            }
             waitingRef.transaction(waiting => {
                 if (!waiting) return [];
-                return waiting.filter(item => !(item && item.uid === (currentUser && currentUser.uid)));
+                return waiting.filter(uid => uid !== (currentUser && currentUser.uid));
             });
         } else {
             waitingRef.transaction(waiting => {
                 if (!waiting) return [];
-                return waiting.filter(item => !(item && item.uid === (currentUser && currentUser.uid)));
+                return waiting.filter(uid => uid !== (currentUser && currentUser.uid));
             });
         }
     });
 
     auth.onAuthStateChanged(user => {
         if (!user && myGameId) {
+            // if signed out, try to mark abort so opponent isn't surprised
             try {
                 let result = {
                     type: 'abort',
