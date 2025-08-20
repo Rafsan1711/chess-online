@@ -3,466 +3,449 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Online Chess — Firebase Matchmaking</title>
+  <title>Online Chess — Launch Ready (v2)</title>
 
-  <!-- Simple styles -->
+  <!-- Bootstrap for basic UI -->
+  <link rel="stylesheet"
+        href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css"
+        crossorigin="anonymous">
+
+  <!-- Chessboard.js CSS -->
+  <link rel="stylesheet"
+        href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css"
+        crossorigin="anonymous">
+
   <style>
-    body { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; background:#0f172a; color:#e6eef8; margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;}
-    .container { width:100%; max-width:980px; margin:24px; }
-    header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
-    .btn { padding:10px 14px; border-radius:8px; cursor:pointer; border:0; font-weight:600; }
-    .btn-primary { background:#2563eb; color:white; }
-    .btn-ghost { background:transparent; color:#cbd5e1; border:1px solid #334155; }
-    .card { background: #041025; border-radius:12px; padding:18px; box-shadow: 0 6px 18px rgba(2,6,23,0.6); }
-    .center { text-align:center; }
+    body { background:#0f172a; color:#e6eef8; font-family: Arial, Helvetica, sans-serif; }
+    main { padding: 20px; max-width: 1100px; margin: 0 auto; }
+    .screen { display: none; }
+    .visible { display: block; }
     #myBoard { width: 480px; margin: 0 auto; }
-    .screen { display:none; }
-    .visible { display:block; }
-    .small { font-size:0.9rem; color:#98a8c8; }
-    #status { text-align:center; margin-top:10px; color:#9fb4e0; }
-    input[type="text"]{ padding:8px 10px; border-radius:8px; border:1px solid #334155; background:#001028; color:#e6eef8; }
-    footer { text-align:center; margin-top:14px; color:#7f94b7; font-size:0.9rem; }
+    .controls { text-align:center; margin-top:12px; }
+    .info { text-align:center; margin-top:8px; color:#9fb0d5; }
+    footer { text-align:center; color:#6b7d99; margin-top: 18px; }
+    .btn-outline-safe { border-color:#60a5fa; color:#60a5fa }
+    .highlight-white { box-shadow: inset 0 0 40px rgba(255,255,255,0.06); }
+    .highlight-black { box-shadow: inset 0 0 40px rgba(0,0,0,0.35); }
+    /* small responsive */
+    @media (max-width:540px){
+       #myBoard { width: 95vw; }
+    }
   </style>
+</head>
 
-  <!-- jQuery (optional, used for small helpers) -->
-  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<body>
+  <main>
+    <!-- LOGIN SCREEN -->
+    <section id="loginScreen" class="screen visible">
+      <h1 class="text-center">Online Chess (v2)</h1>
+      <p class="text-center info">Sign in with Google to play real-time with others (Firebase Auth + Realtime DB).</p>
+      <div class="text-center my-4">
+        <button id="btnGoogleSignIn" class="btn btn-primary btn-lg">Sign in with Google</button>
+      </div>
+    </section>
 
-  <!-- Chessboard.js (CDN) -->
-  <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css" crossorigin="anonymous">
-  <script defer src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js" crossorigin="anonymous"></script>
+    <!-- HOME SCREEN -->
+    <section id="homeScreen" class="screen px-3">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <h3 id="welcomeText">Welcome</h3>
+          <div id="userInfo" class="text-muted"></div>
+        </div>
+        <div>
+          <button id="btnSignOut" class="btn btn-outline-light">Sign out</button>
+        </div>
+      </div>
 
-  <!-- chess.js: you said you'll keep this in your directory at js/chess.js -->
-  <script defer src="js/chess.js"></script>
+      <hr/>
 
-  <!-- Firebase compat (simple for quick implementation) -->
+      <div class="text-center my-4">
+        <button id="btnStartGame" class="btn btn-success btn-lg">Start Game (Quick Match)</button>
+      </div>
+
+      <div class="info">Click Start Game → you'll be placed into waiting queue. When two players are matched, the match starts instantly for both players.</div>
+    </section>
+
+    <!-- WAITING SCREEN -->
+    <section id="waitingScreen" class="screen text-center px-3">
+      <h3>Waiting for an opponent...</h3>
+      <p id="waitingInfo" class="info">You are in queue.</p>
+      <div class="my-3">
+        <button id="btnCancelWaiting" class="btn btn-danger">Cancel</button>
+      </div>
+    </section>
+
+    <!-- MATCH SCREEN -->
+    <section id="matchScreen" class="screen px-3">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <h4 id="matchVs">Match</h4>
+          <p id="matchStatus" class="text-muted"></p>
+        </div>
+        <div>
+          <button id="btnLeaveMatch" class="btn btn-outline-danger">Leave Match</button>
+        </div>
+      </div>
+
+      <div id="myBoard" class="mx-auto mt-3"></div>
+
+      <div class="info mt-2">
+        Turn: <span id="turnIndicator">-</span> &nbsp; | &nbsp; FEN: <span id="fenDisplay">-</span>
+      </div>
+
+      <div class="controls">
+        <button id="btnResign" class="btn btn-warning">Resign</button>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    Put chess.js in js/chess.js, piece images in /piece (wK.svg, bK.svg, etc).
+  </footer>
+
+  <!-- jQuery (used by chessboard.js) -->
+  <script src="https://code.jquery.com/jquery-3.5.1.js" crossorigin="anonymous"></script>
+
+  <!-- Firebase (compat libraries for simpler migration) -->
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
-</head>
-<body>
-  <div class="container">
-    <header>
-      <div>
-        <h2 style="margin:0">Online Chess</h2>
-        <div class="small">Realtime 1v1 matchmaking with Firebase Realtime Database</div>
-      </div>
-      <div id="authControls">
-        <button id="btnSignIn" class="btn btn-primary">Sign in with Google</button>
-        <button id="btnSignOut" class="btn btn-ghost" style="display:none">Sign out</button>
-      </div>
-    </header>
 
-    <!-- LOGIN / HOME / WAIT / MATCH screens -->
-    <div id="loginScreen" class="screen visible card center">
-      <h3>Welcome — Sign in to play</h3>
-      <p class="small">Sign in with Google to join the matchmaking queue.</p>
-      <div style="margin-top:14px">
-        <button id="startSignIn" class="btn btn-primary">Sign in with Google</button>
-      </div>
-      <div id="loginInfo" class="small" style="margin-top:10px"></div>
-    </div>
+  <!-- Chessboard.js -->
+  <script defer src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"
+          crossorigin="anonymous"></script>
 
-    <div id="homeScreen" class="screen card">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <div>
-          <div id="welcomeText" style="font-weight:700"></div>
-          <div class="small" id="uidText"></div>
-        </div>
-        <div>
-          <button id="btnStartQueue" class="btn btn-primary">Start Match (Quick Play)</button>
-          <button id="btnSignOut2" class="btn btn-ghost" style="display:none">Sign out</button>
-        </div>
-      </div>
-      <div id="homeSmall" class="small center" style="margin-top:14px">Click Start Match — we'll pair you with the next available player instantly.</div>
-    </div>
-
-    <div id="waitingScreen" class="screen card center">
-      <h3>Waiting for opponent…</h3>
-      <p id="waitingPlayers" class="small">Players in room: 1/2</p>
-      <div style="margin-top:12px">
-        <button id="btnCancelQueue" class="btn btn-ghost">Cancel</button>
-      </div>
-    </div>
-
-    <div id="matchScreen" class="screen card center">
-      <h3 id="vsText">Match</h3>
-      <div id="myBoard"></div>
-      <div id="status" class="small">Loading board…</div>
-      <div style="margin-top:10px">
-        <button id="btnLeaveMatch" class="btn btn-ghost">Leave Match</button>
-      </div>
-    </div>
-
-    <footer>Pieces are loaded from ./pieces/{piece}.svg — place wK.svg bK.svg wQ.svg bQ.svg etc. in the pieces/ folder.</footer>
-  </div>
+  <!-- chess.js (you said you'll keep locally at js/chess.js) -->
+  <script defer src="js/chess.js"></script>
 
   <script>
-  /*************************************************************************
-   * IMPORTANT:
-   * - Put your firebase config values below.
-   * - Keep js/chess.js in folder js/ (already included).
-   * - Put piece images in ./pieces/ named exactly as chessboard's piece keys
-   *   e.g.: wK.svg, wQ.svg, wR.svg, wB.svg, wN.svg, wP.svg and bK.svg, ...
-   *
-   * Matchmaking logic:
-   * - Attempts to join existing open rooms (rooms.started === false and players < 2)
-   * - Joins using a transaction on the room node to avoid race conditions
-   * - If no room found, creates a room and listens for started === true
-   * - When room.started becomes true both clients will instantly detect it
-   *   and enter the match screen.
-   *************************************************************************/
-
-  // Replace these with your project's config
-  const firebaseConfig = {
-    apiKey: "REPLACE_ME",
-    apiKey: "AIzaSyD8z3e5j9y48wJkyU89F7M19cDfxQ4P8uo",
-  authDomain: "chess-online-ebc1f.firebaseapp.com",
-  databaseURL: "https://chess-online-ebc1f-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "chess-online-ebc1f",
-  storageBucket: "chess-online-ebc1f.firebasestorage.app",
-  messagingSenderId: "825068912703",
-  appId: "1:825068912703:web:48330509c612b8b4cdf88a"
-};
-
-  firebase.initializeApp(firebaseConfig);
-  const auth = firebase.auth();
-  const db = firebase.database();
-
-  // UI refs
-  const loginScreen = document.getElementById('loginScreen');
-  const homeScreen = document.getElementById('homeScreen');
-  const waitingScreen = document.getElementById('waitingScreen');
-  const matchScreen = document.getElementById('matchScreen');
-
-  const startSignIn = document.getElementById('startSignIn');
-  const btnSignIn = document.getElementById('btnSignIn');
-  const btnSignOut = document.getElementById('btnSignOut');
-  const btnSignOut2 = document.getElementById('btnSignOut2');
-  const btnStartQueue = document.getElementById('btnStartQueue');
-  const btnCancelQueue = document.getElementById('btnCancelQueue');
-  const btnLeaveMatch = document.getElementById('btnLeaveMatch');
-
-  const welcomeText = document.getElementById('welcomeText');
-  const uidText = document.getElementById('uidText');
-  const waitingPlayers = document.getElementById('waitingPlayers');
-  const vsText = document.getElementById('vsText');
-  const statusText = document.getElementById('status');
-
-  // state
-  let currentUser = null;
-  let userName = 'Player';
-  let currentRoomRef = null;   // db ref of the room we created/joined
-  let currentRoomKey = null;
-  let roomListener = null;
-  let movesListener = null;
-
-  // Chessboard + chess.js
-  let board = null;
-  let game = null;
-  let localApplyingRemote = false;
-
-  // show a screen
-  function showScreen(el) {
-    [loginScreen, homeScreen, waitingScreen, matchScreen].forEach(s => s.classList.remove('visible'));
-    el.classList.add('visible');
-  }
-
-  // Auth
-  function signInWithGoogle() {
-    const provider = new firebase.auth.GoogleAuthProvider();
-    auth.signInWithPopup(provider).catch(e => alert('Sign-in error: ' + e.message));
-  }
-  function signOut() {
-    if (currentRoomRef) leaveRoom();
-    auth.signOut();
-  }
-
-  startSignIn.onclick = signInWithGoogle;
-  btnSignIn.onclick = signInWithGoogle;
-  btnSignOut.onclick = signOut;
-  btnSignOut2.onclick = signOut;
-
-  auth.onAuthStateChanged(async user => {
-    if (user) {
-      currentUser = user;
-      userName = user.displayName || (user.email ? user.email.split('@')[0] : 'Player');
-      welcomeText.textContent = `${userName}`;
-      uidText.textContent = `UID: ${user.uid}`;
-      btnSignIn.style.display = 'none';
-      btnSignOut.style.display = 'inline-block';
-      btnSignOut2.style.display = 'inline-block';
-      showScreen(homeScreen);
-    } else {
-      currentUser = null;
-      userName = 'Player';
-      welcomeText.textContent = '';
-      uidText.textContent = '';
-      btnSignIn.style.display = 'inline-block';
-      btnSignOut.style.display = 'none';
-      btnSignOut2.style.display = 'none';
-      showScreen(loginScreen);
-    }
-  });
-
-  // START matchmaking
-  btnStartQueue.onclick = async function() {
-    if (!currentUser) { alert('Please sign in first'); return; }
-    btnStartQueue.disabled = true;
-    await findOrCreateRoom();
-  };
-
-  btnCancelQueue.onclick = async function() {
-    btnStartQueue.disabled = false;
-    await leaveRoom();
-    showScreen(homeScreen);
-  };
-
-  btnLeaveMatch.onclick = async function() {
-    // remove user from room and go back home
-    await leaveRoom();
-    showScreen(homeScreen);
-    btnStartQueue.disabled = false;
-  };
-
-  // Core matchmaking functions
-  async function findOrCreateRoom() {
-    showScreen(waitingScreen);
-    waitingPlayers.textContent = 'Players in room: 1/2';
-
-    // 1) Look for open rooms (started === false) ordered by createdAt
-    const snapshot = await db.ref('rooms').orderByChild('started').equalTo(false).once('value');
-    const rooms = snapshot.exists() ? snapshot.val() : null;
-
-    // If there are candidate rooms, try to join each (older first)
-    if (rooms) {
-      // create array of [key, data] sorted by createdAt ascending
-      const arr = Object.keys(rooms).map(k => ({ k, data: rooms[k] }));
-      arr.sort((a,b) => (a.data.createdAt || 0) - (b.data.createdAt || 0));
-      for (const candidate of arr) {
-        const joined = await tryJoinRoom(candidate.k);
-        if (joined) return; // joined successfully (and maybe match started)
-      }
-    }
-
-    // 2) No suitable room or couldn't join — create a new room and wait
-    await createRoomAndWait();
-  }
-
-  // Try to join an existing room using a transaction on /rooms/{roomId}
-  async function tryJoinRoom(roomId) {
-    const roomRef = db.ref('rooms/' + roomId);
-    // run transaction to safely add ourselves if there's space
-    const res = await roomRef.transaction(current => {
-      if (!current) return; // room removed or doesn't exist
-      if (current.started) return; // already started
-      if (!current.players) current.players = {};
-      const pKeys = Object.keys(current.players || {});
-      if (pKeys.length >= 2) return; // full
-      // If already present, do nothing
-      if (current.players[currentUser.uid]) return current;
-      // add self
-      current.players[currentUser.uid] = { uid: currentUser.uid, name: userName, joinedAt: firebase.database.ServerValue.TIMESTAMP };
-      // If now two players, start the match
-      const newCount = Object.keys(current.players).length;
-      if (newCount === 2) {
-        current.started = true;
-        // initialize match state (fen) if not present
-        try {
-          // put starting fen on the room so both clients read same starting position
-          current.fen = (new Chess()).fen ? (new Chess()).fen() : 'start';
-        } catch (e) {
-          current.fen = 'start';
-        }
-      }
-      return current;
-    }, {timeout:5000});
-
-    if (!res.committed) return false;
-    const val = res.snapshot.val();
-    if (!val) return false;
-
-    // We are now part of the room (either waiting or started)
-    attachRoom(roomId);
-    // If room started already, enter immediately
-    if (val.started) {
-      // enter — both clients will see started true and enterMatch will be called by listener
-    }
-    return true;
-  }
-
-  // Create a new room (we become the first player) and attach listener
-  async function createRoomAndWait() {
-    const newRoomRef = db.ref('rooms').push();
-    const roomKey = newRoomRef.key;
-    const initial = {
-      started: false,
-      createdAt: firebase.database.ServerValue.TIMESTAMP,
-      players: {}
+    // ============================
+    // IMPORTANT: Replace with YOUR Firebase config (launch-ready: fill these)
+    // ============================
+    const firebaseConfig = {
+      apiKey: "REPLACE_WITH_YOUR_API_KEY",
+      authDomain: "REPLACE_WITH_PROJECT.firebaseapp.com",
+      databaseURL: "https://REPLACE_WITH_PROJECT.firebaseio.com",
+      projectId: "REPLACE_WITH_PROJECT",
+      storageBucket: "REPLACE_WITH_PROJECT.appspot.com",
+      messagingSenderId: "REPLACE_ME",
+      appId: "REPLACE_ME"
     };
-    initial.players[currentUser.uid] = { uid: currentUser.uid, name: userName, joinedAt: firebase.database.ServerValue.TIMESTAMP };
+    // ============================
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.database();
 
-    await newRoomRef.set(initial);
-    // set onDisconnect to remove our player entry; if room empty you may want to remove room
-    const myPlayerRef = db.ref('rooms/' + roomKey + '/players/' + currentUser.uid);
-    await myPlayerRef.onDisconnect().remove();
+    // UI refs
+    const loginScreen = document.getElementById('loginScreen');
+    const homeScreen = document.getElementById('homeScreen');
+    const waitingScreen = document.getElementById('waitingScreen');
+    const matchScreen = document.getElementById('matchScreen');
 
-    // Also set a cleanup: if room has no players after a short window, remove it
-    // We'll set onDisconnect remove of 'rooms/{roomKey}/cleanupFlag' and a Cloud Function could remove it.
-    // For now we rely on removing player and simple client cleanup.
+    const btnGoogleSignIn = document.getElementById('btnGoogleSignIn');
+    const btnSignOut = document.getElementById('btnSignOut');
+    const welcomeText = document.getElementById('welcomeText');
+    const userInfo = document.getElementById('userInfo');
+    const btnStartGame = document.getElementById('btnStartGame');
+    const btnCancelWaiting = document.getElementById('btnCancelWaiting');
+    const waitingInfo = document.getElementById('waitingInfo');
 
-    attachRoom(roomKey);
-  }
+    const matchVs = document.getElementById('matchVs');
+    const matchStatus = document.getElementById('matchStatus');
+    const turnIndicator = document.getElementById('turnIndicator');
+    const fenDisplay = document.getElementById('fenDisplay');
+    const btnLeaveMatch = document.getElementById('btnLeaveMatch');
+    const btnResign = document.getElementById('btnResign');
 
-  // Attach listeners to the room we created/joined
-  function attachRoom(roomKey) {
-    // cleanup previous
-    if (currentRoomRef && roomListener) {
-      currentRoomRef.off('value', roomListener);
-      roomListener = null;
+    // state
+    let currentUser = null;
+    let waitingRef = null;
+    let waitingKey = null;
+    let pairListener = null;
+    let waitingListener = null;
+
+    let matchId = null;
+    let matchRef = null;
+    let matchMovesRef = null;
+    let matchListener = null;
+    let matchMovesChildListener = null;
+
+    // chess state
+    let board = null;
+    let game = null;
+    let myColor = null; // 'w' or 'b'
+
+    // helper: show screen
+    function showScreen(screenEl) {
+      [loginScreen, homeScreen, waitingScreen, matchScreen].forEach(s => s.classList.remove('visible'));
+      screenEl.classList.add('visible');
     }
-    currentRoomKey = roomKey;
-    currentRoomRef = db.ref('rooms/' + roomKey);
 
-    // Listen for room changes (players, started, fen)
-    roomListener = currentRoomRef.on('value', snap => {
-      const room = snap.val();
-      if (!room) {
-        // room removed -> go back home
-        statusText.textContent = 'Room removed. Returning home.';
-        leaveRoom(true);
+    // Auth listeners
+    btnGoogleSignIn.addEventListener('click', () => {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      auth.signInWithPopup(provider).catch(err => alert('Sign-in error: ' + err.message));
+    });
+
+    btnSignOut.addEventListener('click', async () => {
+      await cancelWaiting();
+      await leaveMatchCleanup();
+      auth.signOut();
+    });
+
+    auth.onAuthStateChanged(user => {
+      currentUser = user;
+      if (user) {
+        welcomeText.textContent = `Welcome, ${user.displayName || 'Player'}`;
+        userInfo.textContent = `UID: ${user.uid}`;
+        // presence
+        const presRef = db.ref('users/' + user.uid + '/presence');
+        presRef.set(true);
+        presRef.onDisconnect().remove();
+
+        // Listen for currentMatch path as secondary method (optional)
+        db.ref('users/' + user.uid + '/currentMatch').on('value', snap => {
+          const mid = snap.val();
+          if (mid) {
+            // someone assigned match via user node
+            enterMatch(mid);
+          }
+        });
+
+        showScreen(homeScreen);
+      } else {
+        showScreen(loginScreen);
+      }
+    });
+
+    // Start & Waiting logic (improved)
+    btnStartGame.addEventListener('click', async () => {
+      if (!currentUser) return alert('Please sign in.');
+      // push waiting entry
+      waitingRef = db.ref('waiting').push();
+      waitingKey = waitingRef.key;
+      await waitingRef.set({
+        uid: currentUser.uid,
+        name: currentUser.displayName || '',
+        ts: firebase.database.ServerValue.TIMESTAMP,
+        matchId: null
+      });
+      // ensure removal on disconnect
+      waitingRef.onDisconnect().remove();
+
+      // Listen to own waiting entry — this guarantees you'll detect when someone assigns matchId
+      if (waitingListener) waitingRef.off('value', waitingListener);
+      waitingListener = waitingRef.on('value', snap => {
+        const val = snap.val();
+        if (!val) return; // probably removed
+        if (val.matchId) {
+          // matched — enter match
+          enterMatch(val.matchId);
+        }
+      });
+
+      showScreen(waitingScreen);
+      waitingInfo.textContent = 'You are waiting...';
+
+      // start watching waiting list to attempt pairing (only one listener)
+      if (!pairListener) {
+        pairListener = db.ref('waiting');
+        pairListener.on('value', snap => {
+          const waiting = snap.val() || {};
+          const keys = Object.keys(waiting);
+          // only try if there are at least 2 entries
+          if (keys.length >= 2) {
+            tryPairing();
+          }
+        });
+      }
+    });
+
+    btnCancelWaiting.addEventListener('click', () => {
+      cancelWaiting();
+    });
+
+    async function cancelWaiting() {
+      if (waitingRef) {
+        try { await waitingRef.remove(); } catch (e) {}
+        if (waitingListener) { waitingRef.off('value', waitingListener); waitingListener = null; }
+        waitingRef = null;
+        waitingKey = null;
+      }
+      if (pairListener) {
+        pairListener.off();
+        pairListener = null;
+      }
+      showScreen(homeScreen);
+    }
+
+    // Pairing logic with lock + notifying both waiting entries explicitly
+    async function tryPairing() {
+      if (!currentUser) return;
+
+      const lockRef = db.ref('pairingLock');
+      lockRef.transaction(current => {
+        if (current === null) {
+          return currentUser.uid; // acquire lock
+        }
+        return; // already held
+      }, async (err, committed, snap) => {
+        if (err) return;
+        if (!committed) return; // couldn't acquire
+        // acquired lock
+        try {
+          // read ordered by timestamp to get oldest two
+          const waitingSnap = await db.ref('waiting').orderByChild('ts').once('value');
+          const waitingObj = waitingSnap.val() || {};
+          const entries = [];
+          waitingSnap.forEach(child => {
+            entries.push({ key: child.key, val: child.val() });
+          });
+          if (entries.length < 2) {
+            await db.ref('pairingLock').remove();
+            return;
+          }
+          // pick oldest two
+          const a = entries[0];
+          const b = entries[1];
+          // Create match
+          const newMatchRef = db.ref('matches').push();
+          const newMatchId = newMatchRef.key;
+
+          // default starting FEN and metadata
+          const startingChess = (typeof Chess !== 'undefined') ? new Chess() : null;
+          const startingFen = startingChess ? startingChess.fen() : 'start';
+
+          const players = {};
+          // assign colors deterministically: a => white, b => black
+          players['white'] = { uid: a.val.uid, name: a.val.name || '' };
+          players['black'] = { uid: b.val.uid, name: b.val.name || '' };
+
+          await newMatchRef.set({
+            fen: startingFen,
+            turn: 'w',
+            createdAt: firebase.database.ServerValue.TIMESTAMP,
+            players: players,
+            moves: {}
+          });
+
+          // Notify both waiting entries by setting matchId on each waiting node.
+          const updates = {};
+          updates['waiting/' + a.key + '/matchId'] = newMatchId;
+          updates['waiting/' + b.key + '/matchId'] = newMatchId;
+
+          // Also set users/{uid}/currentMatch as redundancy
+          updates['users/' + a.val.uid + '/currentMatch'] = newMatchId;
+          updates['users/' + b.val.uid + '/currentMatch'] = newMatchId;
+
+          await db.ref().update(updates);
+          // release lock
+          await db.ref('pairingLock').remove();
+        } catch (e) {
+          // release lock in any case
+          await db.ref('pairingLock').remove();
+        }
+      });
+    }
+
+    // ENTER MATCH (listens to match records + moves)
+    async function enterMatch(id) {
+      // cleanup any previous listeners
+      await leaveMatchCleanup();
+
+      matchId = id;
+      matchRef = db.ref('matches/' + matchId);
+      matchMovesRef = db.ref('matches/' + matchId + '/moves');
+
+      // fetch match once
+      const snap = await matchRef.once('value');
+      const match = snap.val();
+      if (!match) {
+        alert('Match no longer exists.');
         showScreen(homeScreen);
         return;
       }
-      const players = room.players ? Object.values(room.players) : [];
-      waitingPlayers.textContent = `Players in room: ${players.length}/2`;
-      // If started === true -> enter match
-      if (room.started) {
-        enterMatch(roomKey, room);
+
+      // determine my color
+      if (match.players && match.players.white && match.players.white.uid === currentUser.uid) {
+        myColor = 'w';
+      } else if (match.players && match.players.black && match.players.black.uid === currentUser.uid) {
+        myColor = 'b';
       } else {
-        showScreen(waitingScreen);
+        myColor = 'spectator';
       }
-    });
-  }
 
-  // Leave current room: remove player entry and listeners
-  async function leaveRoom(skipUI=false) {
-    try {
-      if (!currentRoomKey) return;
-      // remove our player entry
-      await db.ref('rooms/' + currentRoomKey + '/players/' + currentUser.uid).remove();
-      // try to remove the room if empty (transaction)
-      const roomRef = db.ref('rooms/' + currentRoomKey);
-      await roomRef.transaction(current => {
-        if (!current) return;
-        const players = current.players || {};
-        if (Object.keys(players).length === 0) {
-          return null; // remove room
-        }
-        return current;
+      matchVs.textContent = `${match.players.white.name || 'White'} vs ${match.players.black.name || 'Black'}`;
+      matchStatus.textContent = `You are ${myColor === 'w' ? 'White' : myColor === 'b' ? 'Black' : 'Spectator'}`;
+
+      // init chess.js game
+      if (!game) game = new Chess();
+      if (match.fen && game.validate_fen) {
+        // chess.js exposes validate_fen; try load
+        try { game.load(match.fen); } catch (e) { game.reset(); }
+      } else {
+        game.reset();
+      }
+
+      // initialize chessboard.js with custom pieceTheme to use your /piece folder
+      if (!board) {
+        board = Chessboard('myBoard', {
+          draggable: true,
+          position: game.fen(),
+          onDragStart: onDragStart,
+          onDrop: onDrop,
+          onSnapEnd: onSnapEnd,
+          // pieceTheme: function(piece) { return 'piece/' + piece + '.svg'; } // alternative signature supported
+          pieceTheme: function(piece) {
+            // chessboard.js passes piece like 'wK','bQ' etc.
+            return 'piece/' + piece + '.svg';
+          }
+        });
+      } else {
+        board.position(game.fen());
+      }
+
+      // Listen for match metadata updates (fen/turn)
+      matchListener = matchRef.on('value', snap => {
+        const data = snap.val();
+        if (!data) return;
+        fenDisplay.textContent = data.fen || '';
+        turnIndicator.textContent = data.turn === 'w' ? 'White' : 'Black';
       });
-    } catch (e) {
-      // ignore
-    } finally {
-      if (roomListener && currentRoomRef) {
-        currentRoomRef.off('value', roomListener);
-        roomListener = null;
-      }
-      if (movesListener && currentRoomRef) {
-        currentRoomRef.child('moves').off('child_added', movesListener);
-        movesListener = null;
-      }
-      currentRoomRef = null;
-      currentRoomKey = null;
-      // reset chess vars
-      if (board) { board.position('start'); }
-      if (!skipUI) {
-        showScreen(homeScreen);
-        btnStartQueue.disabled = false;
-      }
-    }
-  }
 
-  // Enter match when room.started === true
-  function enterMatch(roomKey, roomData) {
-    // stop showing waiting
-    showScreen(matchScreen);
-    // set heading
-    const players = roomData.players || {};
-    const names = Object.values(players).map(p => p.name || p.uid);
-    vsText.textContent = `${names[0] || 'Player1'}  vs  ${names[1] || 'Player2'}`;
+      // listen for moves appended
+      matchMovesChildListener = matchMovesRef.on('child_added', snap => {
+        const mv = snap.val();
+        if (!mv) return;
+        // don't re-apply moves authored by ourselves twice:
+        if (mv.authorUid === currentUser.uid) return;
+        applyRemoteMove(mv);
+      });
 
-    // Initialize chess game object if not exist
-    if (!game) game = new Chess();
-
-    // If fen available from DB, load it
-    if (roomData.fen) {
-      game.load(roomData.fen);
-    } else {
-      game.reset();
+      showScreen(matchScreen);
     }
 
-    // Initialize chessboard if not exist
-    if (!board) {
-      // pieceTheme maps e.g. 'wK' -> 'pieces/wK.svg'
-      board = Chessboard('myBoard', {
-        draggable: true,
-        position: game.fen(),
-        pieceTheme: (piece) => `pieces/${piece}.svg`,
-        onDragStart: onDragStart,
-        onDrop: onDrop,
-        onSnapEnd: onSnapEnd
-      });
-    } else {
+    // Chessboard callbacks
+    function onDragStart(source, piece, position, orientation) {
+      if (!game) return false;
+      if (game.game_over()) return false;
+      // ensure it's player's turn
+      if (game.turn() === 'w' && piece.search(/^b/) !== -1) return false;
+      if (game.turn() === 'b' && piece.search(/^w/) !== -1) return false;
+      if (myColor !== game.turn()) return false; // spectator or wrong side can't move
+      return true;
+    }
+
+    function onDrop(source, target) {
+      // attempt move
+      const move = game.move({ from: source, to: target, promotion: 'q' });
+      if (move === null) return 'snapback';
+
+      // update board
       board.position(game.fen());
-    }
 
-    statusText.textContent = `Turn: ${game.turn() === 'w' ? 'White' : 'Black'}`;
-
-    // Listen to moves appended to the room
-    const movesRef = db.ref('rooms/' + roomKey + '/moves');
-    if (movesListener) {
-      movesRef.off('child_added', movesListener);
-      movesListener = null;
-    }
-    movesListener = movesRef.on('child_added', snap => {
-      const mv = snap.val();
-      if (!mv) return;
-      // if this move was authored by me and I've already applied it, skip
-      if (mv.authorUid === currentUser.uid) return;
-      applyRemoteMove(mv);
-    });
-
-    // When match finishes you might want to set room.finished or remove the room
-  }
-
-  // Chessboard callbacks
-  function onDragStart(source, piece, position, orientation) {
-    // don't pick up pieces if game over
-    if (!game || game.game_over()) return false;
-    // ensure it's player's side to move (we are not assigning colors to players explicitly here)
-    // For simple fairness, we'll allow both to play on same board (they both can move). If you want to assign whites/blacks:
-    // assign color based on join order: first player white, second black (you can store that in room.players)
-    // For brevity, we let both move when it's their turn; below we enforce move color by checking game.turn() vs player's assigned color.
-    // Determine our assigned color:
-    const roomPlayers = currentRoomRef ? null : null;
-    // we'll compute color assignment from DB (players object): first joined = white, second = black
-    // fetch players now synchronously via previously-read room data? Simpler: fetch room
-    // But to keep UI responsive, we'll fetch players now:
-  }
-
-  // onDrop: apply move locally + push to DB
-  async function onDrop(source, target) {
-    if (!game) return 'snapback';
-    // try move
-    const move = game.move({ from: source, to: target, promotion: 'q' });
-    if (move === null) return 'snapback';
-    // update board immediately
-    board.position(game.fen());
-    statusText.textContent = `Turn: ${game.turn() === 'w' ? 'White' : 'Black'}`;
-
-    // push to DB
-    if (currentRoomKey) {
-      const pushObj = {
+      // push move to DB
+      const mv = {
         from: move.from,
         to: move.to,
         piece: move.piece,
@@ -473,45 +456,90 @@
         authorUid: currentUser.uid,
         ts: firebase.database.ServerValue.TIMESTAMP
       };
-      await db.ref('rooms/' + currentRoomKey + '/moves').push(pushObj);
-      // update fen in room so newly joined watchers get current position
-      await db.ref('rooms/' + currentRoomKey).update({ fen: game.fen(), lastMoveAt: firebase.database.ServerValue.TIMESTAMP });
+      matchMovesRef.push(mv).catch(e => console.warn('push move failed', e));
+
+      // update match fen & turn
+      matchRef.update({ fen: game.fen(), turn: game.turn() }).catch(e => console.warn('update match failed', e));
     }
-    return;
-  }
 
-  function onSnapEnd() {
-    if (board && game) board.position(game.fen());
-  }
-
-  // apply remote move we didn't author
-  function applyRemoteMove(mv) {
-    try {
-      localApplyingRemote = true;
-      game.move({ from: mv.from, to: mv.to, promotion: mv.promotion || 'q' });
+    function onSnapEnd() {
       board.position(game.fen());
-      statusText.textContent = `Turn: ${game.turn() === 'w' ? 'White' : 'Black'}`;
-    } catch (e) {
-      console.warn('Failed to apply remote move', e);
-    } finally {
-      localApplyingRemote = false;
     }
-  }
 
-  // BEFORE UNLOAD: clean up presence/room entry
-  window.addEventListener('beforeunload', async () => {
-    if (currentRoomKey) {
+    // Apply remote move safely
+    function applyRemoteMove(moveObj) {
+      if (!game) return;
+      // apply move by from/to/promotion
+      const m = game.move({ from: moveObj.from, to: moveObj.to, promotion: moveObj.promotion || 'q' });
+      if (m) {
+        board.position(game.fen());
+        matchRef.update({ fen: game.fen(), turn: game.turn() }).catch(()=>{});
+      }
+    }
+
+    // Leave match + cleanup listeners
+    async function leaveMatchCleanup() {
       try {
-        await db.ref('rooms/' + currentRoomKey + '/players/' + currentUser.uid).remove();
+        if (matchListener && matchRef) { matchRef.off('value', matchListener); matchListener = null; }
+        if (matchMovesChildListener && matchMovesRef) { matchMovesRef.off('child_added', matchMovesChildListener); matchMovesChildListener = null; }
+        if (matchRef && currentUser) {
+          // remove users/{uid}/currentMatch if it's pointing to this match
+          const userMatchRef = db.ref('users/' + currentUser.uid + '/currentMatch');
+          const snap = await userMatchRef.once('value');
+          if (snap.val() === matchId) {
+            userMatchRef.remove().catch(()=>{});
+          }
+        }
       } catch (e) {}
+      matchId = null;
+      matchRef = null;
+      matchMovesRef = null;
+      // don't remove board/game; keep them for new match
+      showScreen(homeScreen);
     }
-  });
 
-  // initial UI
-  showScreen(loginScreen);
+    btnLeaveMatch.addEventListener('click', async () => {
+      await leaveMatchCleanup();
+      // Also remove waiting entry if any
+      await cancelWaiting();
+    });
 
-  // Quick dev helper: if you already have firebaseConfig and you're testing locally,
-  // ensure pieces exist in ./pieces/ (wK.svg, bK.svg, etc.)
+    // When page unload remove waiting and presence
+    window.addEventListener('beforeunload', async () => {
+      if (waitingRef) try { await waitingRef.remove(); } catch (e) {}
+      if (currentUser) {
+        try { await db.ref('users/' + currentUser.uid + '/presence').remove(); } catch (e) {}
+        try { await db.ref('users/' + currentUser.uid + '/currentMatch').remove(); } catch (e) {}
+      }
+    });
+
+    // Resign button (simple implementation: write a result node and remove match)
+    btnResign.addEventListener('click', async () => {
+      if (!matchId || !currentUser) return;
+      const result = {
+        resignedBy: currentUser.uid,
+        ts: firebase.database.ServerValue.TIMESTAMP
+      };
+      await db.ref('matches/' + matchId + '/result').set(result);
+      // optional: remove match after short delay
+      setTimeout(()=> db.ref('matches/' + matchId).remove().catch(()=>{}), 2000);
+      await leaveMatchCleanup();
+    });
+
+    // Ensure board variable exists if loaded before chess.js:
+    (function ensureChessLoaded(){
+      // If chess.js hasn't loaded yet, wait
+      function initIfReady(){
+        if (typeof Chess !== 'undefined') {
+          if (!game) game = new Chess();
+          // nothing else required; board instantiation happens when match starts
+        } else {
+          setTimeout(initIfReady, 150);
+        }
+      }
+      initIfReady();
+    })();
+
   </script>
 </body>
 	</html>
