@@ -3,28 +3,82 @@
 <head>
     <title>Firebase Online Chess Game</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <!-- Bootstrap CSS & FontAwesome -->
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css">
     <script src="https://kit.fontawesome.com/5b14db5f0b.js" crossorigin="anonymous"></script>
+
     <!-- Chessboard.js CSS -->
     <link rel="stylesheet"
-        href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css"
-        crossorigin="anonymous">
-    <!-- Custom CSS for pieces -->
+          href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css"
+          crossorigin="anonymous">
+
+    <!-- Custom CSS (Dark mode & nicer board colors) -->
     <style>
-        #myBoard {
-            margin: 20px auto;
-            min-width: 320px;
+        :root{
+            --bg: #0e1113;
+            --panel: #0f1417;
+            --muted: #9aa3a8;
+            --accent: #6ee7b7;
+            --light-square: #2f373b;
+            --dark-square:  #1f2426;
+            --highlight-move: #4b6bfb66;
+            --highlight-capture: #fb6b6b66;
         }
+        html,body{
+            height:100%;
+            background: linear-gradient(180deg,var(--bg), #071014 90%);
+            color: #e7eef0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+        }
+        a { color: var(--accent); }
+        .container.centered { margin-top: 48px; }
         .hidden { display: none !important; }
-        .centered { text-align: center; margin-top: 30px; }
-        .piece img { width: 100%; height: 100%; }
         .avatar {
             border-radius: 50%;
-            width: 42px;
-            height: 42px;
+            width: 48px;
+            height: 48px;
             object-fit: cover;
+            border: 2px solid rgba(255,255,255,0.06);
+            background: #0b0d0e;
         }
+        #myBoard { margin: 12px auto; max-width: 480px; }
+        /* chessboard squares (override chessboard.js default) */
+        .white-1e1d7 { background-color: var(--light-square) !important; }
+        .black-3c85d { background-color: var(--dark-square) !important; }
+        /* highlight styles used by the original code */
+        .highlight-white { box-shadow: inset 0 0 0 4px rgba(120,200,255,0.08); }
+        .highlight-black { box-shadow: inset 0 0 0 4px rgba(160,120,255,0.08); }
+        .highlight-hint { box-shadow: inset 0 0 0 4px rgba(120,255,180,0.08); }
+
+        /* board container look */
+        .board {
+            border-radius: 8px;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.02);
+            background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));
+            padding: 6px;
+        }
+
+        /* buttons */
+        .btn { border-radius: 8px; }
+        .btn-danger { background: #ef476f; border: none; }
+        .btn-success { background: #06d6a0; border: none; color: #032b26; }
+        .btn-secondary { background: #1f2a2c; border: none; color: #cfe9e2; }
+
+        /* small responsive tweaks */
+        @media (max-width: 767px) {
+            #myBoard { max-width: 320px; }
+            .avatar { width: 40px; height: 40px; }
+        }
+
+        /* modal custom */
+        .modal-content {
+            background: linear-gradient(180deg, #0b1113, #071014);
+            color: #e6f7ef;
+            border: 1px solid rgba(255,255,255,0.04);
+        }
+        .modal-header { border-bottom: 1px solid rgba(255,255,255,0.03); }
+        .modal-footer { border-top: 1px solid rgba(255,255,255,0.03); }
     </style>
 </head>
 <body>
@@ -41,7 +95,7 @@
     <div id="home-screen" class="container centered hidden">
         <div>
             <img id="user-avatar" class="avatar mb-2" src="" alt="avatar">
-            <div>Welcome, <span id="user-name"></span></div>
+            <div style="margin-top:8px;">Welcome, <span id="user-name"></span></div>
         </div>
         <button id="start-game-btn" class="btn btn-success mt-4">Start Game</button>
         <button id="logout-btn" class="btn btn-secondary ml-2">Logout</button>
@@ -59,7 +113,7 @@
         <div class="row my-3">
             <div class="col-12 text-center">
                 <h3 id="game-title">Chess Match</h3>
-                <span id="match-status"></span>
+                <div id="match-status" style="margin-top:6px;color:var(--muted);"></div>
             </div>
         </div>
         <div class="row align-items-center">
@@ -71,7 +125,10 @@
                     <span><img id="black-avatar" class="avatar" src=""> <b id="black-name"></b> (Black)</span>
                 </div>
                 <div id="gameStatus" class="my-2"></div>
-                <button id="leave-game-btn" class="btn btn-danger">Leave Game</button>
+                <div class="mt-2">
+                    <button id="resign-btn" class="btn btn-danger">Resign</button>
+                    <button id="abort-btn" class="btn btn-secondary ml-2">Abort</button>
+                </div>
             </div>
             <div class="col-md-6">
                 <div id="myBoard"></div>
@@ -79,29 +136,56 @@
         </div>
     </div>
 
+    <!-- Result Modal (shown when opponent resigns/aborts or game ended with a reason) -->
+    <div class="modal fade" id="resultModal" tabindex="-1" role="dialog" aria-labelledby="resultModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 id="resultModalLabel" class="modal-title">Game Result</h5>
+            <button type="button" class="close text-light" data-dismiss="modal" aria-label="Close">
+              <span aria-hidden="true">&times;</span>
+            </button>
+          </div>
+          <div class="modal-body" id="resultModalBody">
+            <!-- Filled dynamically -->
+          </div>
+          <div class="modal-footer">
+            <button type="button" id="resultModalOk" class="btn btn-success" data-dismiss="modal">OK</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Firebase & Dependencies -->
     <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+
+    <!-- Bootstrap JS (for modal) -->
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.bundle.min.js"></script>
+
     <!-- Chessboard.js -->
     <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"
         crossorigin="anonymous"></script>
+
     <!-- Firebase -->
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
     <!-- Chess.js (local file, must be present in same directory) -->
     <script src="js/chess.js"></script>
+
     <script>
     // ----------------- CONFIGURE THIS SECTION -------------------
-    // Replace with your Firebase project config:
+    // Replace with your Firebase project config (already in your file).
     const firebaseConfig = {
         apiKey: "AIzaSyD8z3e5j9y48wJkyU89F7M19cDfxQ4P8uo",
-  authDomain: "chess-online-ebc1f.firebaseapp.com",
-  databaseURL: "https://chess-online-ebc1f-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "chess-online-ebc1f",
-  storageBucket: "chess-online-ebc1f.firebasestorage.app",
-  messagingSenderId: "825068912703",
-  appId: "1:825068912703:web:48330509c612b8b4cdf88a"
-};
+        authDomain: "chess-online-ebc1f.firebaseapp.com",
+        databaseURL: "https://chess-online-ebc1f-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "chess-online-ebc1f",
+        storageBucket: "chess-online-ebc1f.firebasestorage.app",
+        messagingSenderId: "825068912703",
+        appId: "1:825068912703:web:48330509c612b8b4cdf88a"
+    };
     // ------------------------------------------------------------
 
     firebase.initializeApp(firebaseConfig);
@@ -267,6 +351,7 @@
 
         board = Chessboard('myBoard', {
             draggable: true,
+            orientation: (myColor === 'w' ? 'white' : 'black'),
             position: data.fen === 'start' ? 'start' : data.fen,
             pieceTheme: function(piece) {
                 // piece is like 'wK', 'bQ'
@@ -282,21 +367,87 @@
             let gameData = snapshot.val();
             if (!gameData) {
                 // game deleted
-                leaveGame();
+                // treat as abort (if we still have myGameId) to avoid confusion
+                if (myGameId) {
+                    showResultModal({ type: 'abort', by: null, info: 'Game removed' });
+                    cleanupAfterGame();
+                }
                 return;
             }
+
+            // If ended with a result, show a modal describing the reason (resign/abort)
             if (gameData.status === 'ended') {
-                $('#gameStatus').text('Game Ended');
-                board.position(gameData.fen === 'start' ? 'start' : gameData.fen);
+                if (gameData.result) {
+                    showResultModal(gameData.result);
+                } else {
+                    $('#gameStatus').text('Game Ended');
+                }
+                // update board to final position if provided
+                if (gameData.fen) {
+                    chess.load(gameData.fen);
+                    board.position(gameData.fen === 'start' ? 'start' : gameData.fen);
+                }
+                // remove realtime listener for this game (we keep data in DB so opponent can see modal)
                 gamesRef.child(myGameId).off();
+                // cleanup local state after letting user see modal
+                cleanupAfterGame();
                 return;
             }
+
             // Update board if FEN changes
             if (chess.fen() !== gameData.fen && gameData.fen) {
                 chess.load(gameData.fen);
                 board.position(gameData.fen === 'start' ? 'start' : gameData.fen);
             }
             updateStatus();
+        });
+
+        // Hook up resign/abort buttons
+        $('#resign-btn').off('click').on('click', function() {
+            if (!myGameId) return;
+            // mark game ended with resign reason and winner = opponent
+            gamesRef.child(myGameId).once('value').then(snap => {
+                let d = snap.val();
+                if (!d) return;
+                let opponentUid = (d.white.uid === currentUser.uid) ? d.black.uid : d.white.uid;
+                let result = {
+                    type: 'resign',
+                    by: currentUser.uid,
+                    winner: opponentUid,
+                    info: (currentUser.displayName || 'A player') + ' resigned'
+                };
+                gamesRef.child(myGameId).update({
+                    status: 'ended',
+                    result: result,
+                    lastUpdate: firebase.database.ServerValue.TIMESTAMP
+                });
+                // show immediate local modal for clarity
+                showResultModal(result);
+                // cleanup local after modal
+                cleanupAfterGame();
+            });
+        });
+
+        $('#abort-btn').off('click').on('click', function() {
+            if (!myGameId) return;
+            gamesRef.child(myGameId).once('value').then(snap => {
+                let d = snap.val();
+                if (!d) return;
+                let opponentUid = (d.white.uid === currentUser.uid) ? d.black.uid : d.white.uid;
+                let result = {
+                    type: 'abort',
+                    by: currentUser.uid,
+                    winner: null,
+                    info: (currentUser.displayName || 'A player') + ' aborted the game'
+                };
+                gamesRef.child(myGameId).update({
+                    status: 'ended',
+                    result: result,
+                    lastUpdate: firebase.database.ServerValue.TIMESTAMP
+                });
+                showResultModal(result);
+                cleanupAfterGame();
+            });
         });
     }
 
@@ -329,6 +480,12 @@
         // Check game end
         if (chess.game_over()) {
             update.status = "ended";
+            update.result = {
+                type: 'game_over',
+                by: null,
+                winner: null,
+                info: 'Game finished (checkmate/draw/stalemate)'
+            };
         }
         gamesRef.child(myGameId).update(update);
         updateStatus();
@@ -354,32 +511,97 @@
         $('#gameStatus').text(status);
     }
 
-    // Leave game and cleanup
-    $('#leave-game-btn').on('click', leaveGame);
-    function leaveGame() {
-        if (myGameId) {
-            gamesRef.child(myGameId).off();
-            gamesRef.child(myGameId).remove();
+    // Show a friendly modal when game ended by resign/abort/other
+    function showResultModal(result) {
+        let body = '';
+        if (!result) {
+            body = 'Game ended.';
+        } else if (result.type === 'resign') {
+            if (result.by === currentUser.uid) {
+                body = 'You resigned. You lost the game.';
+            } else {
+                body = 'Your opponent resigned. You win!';
+            }
+        } else if (result.type === 'abort') {
+            if (result.by === currentUser.uid) {
+                body = 'You aborted the game.';
+            } else {
+                body = 'Your opponent aborted the game.';
+            }
+        } else if (result.type === 'game_over') {
+            body = result.info || 'Game finished.';
+        } else {
+            // generic
+            body = result.info || 'Game ended.';
         }
+        $('#resultModalBody').text(body);
+        $('#resultModal').modal({backdrop: 'static', keyboard: false});
+    }
+
+    // Cleanup local state after a match finishes (keep DB entry so opponent sees modal)
+    function cleanupAfterGame() {
         myGameId = null;
         myColor = null;
         chess = null;
-        board && board.destroy();
-        board = null;
-        showScreen('home-screen');
+        if (board) {
+            board.destroy();
+            board = null;
+        }
+        // Return to home screen after small delay so user sees modal
+        setTimeout(function() {
+            showScreen('home-screen');
+        }, 300);
     }
 
-    // Cleanup on sign out or window close
-    window.addEventListener('beforeunload', function() {
-        if (myGameId) leaveGame();
-        waitingRef.transaction(waiting => {
-            if (!waiting) return [];
-            return waiting.filter(uid => uid !== (currentUser && currentUser.uid));
-        });
+    // If user closes window while in a game, attempt to mark as abort (best-effort)
+    window.addEventListener('beforeunload', function(e) {
+        if (myGameId && currentUser) {
+            try {
+                let result = {
+                    type: 'abort',
+                    by: currentUser.uid,
+                    winner: null,
+                    info: (currentUser.displayName || 'A player') + ' disconnected'
+                };
+                gamesRef.child(myGameId).update({
+                    status: 'ended',
+                    result: result,
+                    lastUpdate: firebase.database.ServerValue.TIMESTAMP
+                });
+            } catch (err) {
+                // nothing to do; best-effort
+            }
+            waitingRef.transaction(waiting => {
+                if (!waiting) return [];
+                return waiting.filter(uid => uid !== (currentUser && currentUser.uid));
+            });
+        } else {
+            waitingRef.transaction(waiting => {
+                if (!waiting) return [];
+                return waiting.filter(uid => uid !== (currentUser && currentUser.uid));
+            });
+        }
     });
+
     auth.onAuthStateChanged(user => {
-        if (!user && myGameId) leaveGame();
+        if (!user && myGameId) {
+            // if signed out, try to mark abort so opponent isn't surprised
+            try {
+                let result = {
+                    type: 'abort',
+                    by: currentUser ? currentUser.uid : null,
+                    winner: null,
+                    info: 'Player signed out'
+                };
+                gamesRef.child(myGameId).update({
+                    status: 'ended',
+                    result: result,
+                    lastUpdate: firebase.database.ServerValue.TIMESTAMP
+                });
+            } catch (err) {}
+            cleanupAfterGame();
+        }
     });
     </script>
 </body>
-		</html>
+		  </html>
