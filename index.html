@@ -1,1191 +1,554 @@
 <!DOCTYPE html>
-<html lang="en" class="bg-gray-900 text-white">
+<html lang="bn">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="utf-8" />
+  <title>Online Chess — Firebase Demo</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Dot and Box Online Multiplayer</title>
-  <link rel="icon" type="image/png" href="favicon.png">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
-  <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
-  <script src="js/chess.js"></script>
+
+  <!-- Bootstrap (same major version as your original file) -->
+  <link rel="stylesheet"
+        href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css"
+        crossorigin="anonymous">
+
+  <!-- Chessboard.js CSS (CDN like original) -->
+  <link rel="stylesheet"
+        href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css"
+        crossorigin="anonymous">
+
   <style>
-    body { font-family: 'Balsamiq Sans', sans-serif; }
- @font-face {
-  font-family: 'Balsamiq Sans';
-  src: url('fonts/BalsamiqSans-Regular.ttf') format('truetype');
-}
-.bgmusic-settings {
-  box-shadow: 0 2px 12px #222b;
-}
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 54px;
-  height: 28px;
-}
-.switch input {display:none;}
-.slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background-color: #23272f;
-  transition: .4s;
-  border-radius: 34px;
-  border: 2px solid #4ade80;
-}
-.slider:before {
-  position: absolute;
-  content: "";
-  height: 22px; width: 22px;
-  left: 2px; bottom: 2px;
-  background-color: #4ade80;
-  transition: .4s;
-  border-radius: 50%;
-  box-shadow: 0 2px 6px #000a;
-}
-input:checked + .slider {
-  background-color: #4ade80;
-}
-input:checked + .slider:before {
-  transform: translateX(26px);
-  background: #23272f;
-  border: 2px solid #4ade80;
-}
-input:not(:checked) + .slider:before {
-  background: #4ade80;
-  border: 2px solid #23272f;
-}
-.volume-slider {
-  appearance: none;
-  background: linear-gradient(90deg,#4a90e2 0%,#4ade80 100%);
-  height: 6px;
-  border-radius: 6px;
-  outline: none;
-  margin: 0 0 12px 0;
-  transition: background 0.3s;
-}
-.volume-slider::-webkit-slider-thumb {
-  appearance: none;
-  width: 24px; height: 24px;
-  background: #fff;
-  border: 3px solid #4ade80;
-  border-radius: 50%;
-  cursor: pointer;
-  box-shadow: 0 2px 6px #60a5fa99;
-  transition: background 0.2s, border 0.2s;
-}
-.volume-slider:active::-webkit-slider-thumb {
-  background: #4ade80;
-}
-.volume-slider::-moz-range-thumb {
-  width: 24px; height: 24px;
-  background: #fff;
-  border: 3px solid #4ade80;
-  border-radius: 50%;
-  cursor: pointer;
-  box-shadow: 0 2px 6px #60a5fa99;
-  transition: background 0.2s, border 0.2s;
-}
-.volume-slider:active::-moz-range-thumb {
-  background: #4ade80;
-}
-.volume-slider::-ms-thumb {
-  width: 24px; height: 24px;
-  background: #fff;
-  border: 3px solid #4ade80;
-  border-radius: 50%;
-  cursor: pointer;
-  box-shadow: 0 2px 6px #60a5fa99;
-  transition: background 0.2s, border 0.2s;
-}
-.volume-slider:active::-ms-thumb {
-  background: #4ade80;
-}
-.volume-slider:focus {
-  outline: none;
-  box-shadow: 0 0 8px #4ade80;
-}
-@media (max-width: 600px) {
-  .bgmusic-settings {padding:10px;}
-  .volume-slider {height:5px;}
-  .switch {width:44px;height:24px;}
-  .slider:before {height:18px;width:18px;}
-  }
-.download-btn {
-  background: linear-gradient(90deg, #4a90e2 0%, #60a5fa 100%);
-  color: #fff;
-  font-size: 1.15rem;
-  font-weight: 700;
-  padding: 14px 38px;
-  border-radius: 10px;
-  border: none;
-  box-shadow: 0 2px 8px #2225;
-  cursor: pointer;
-  transition: background 0.2s, transform 0.2s;
-  outline: none;
-  margin-top: 6px;
-  margin-bottom: 6px;
-  font-family: 'Balsamiq Sans', sans-serif;
-  display: inline-flex;
-  align-items: center;
-}
-.download-btn:hover {
-  background: linear-gradient(90deg, #2563eb 0%, #38bdf8 100%);
-  transform: translateY(-2px) scale(1.04);
-}
-.download-section h3 {
-  color: #4ade80;
-  font-family: 'Balsamiq Sans', sans-serif;
-  text-shadow: 0 1px 7px #333;
-  }
-    .online-badge {
-      display: inline-block;
-      width: 11px;
-      height: 11px;
-      border-radius: 50%;
-      background: #22c55e;
-      margin-left: 8px;
-      border: 2px solid #222;
-    }
-    .offline-badge {
-      display: inline-block;
-      width: 11px;
-      height: 11px;
-      border-radius: 50%;
-      background: #d1d5db;
-      margin-left: 8px;
-      border: 2px solid #222;
-    }
-    #challenge-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; z-index: 9999;}
-    #challenge-modal.active { display: flex; }
-    #challenge-content { background: #111; padding: 2rem; border-radius: 16px; max-width: 400px; width: 90%; color: white; text-align: center;}
-    .challenge-btn { margin: 0 8px; padding: 10px 24px; border-radius: 8px; font-weight: bold; font-size: 1rem; border: none; cursor: pointer; }
-    .challenge-accept { background: #22c55e; color: #fff;}
-    .challenge-decline { background: #ef4444; color: #fff;}
-    .challenge-accept:hover { background: #16a34a;}
-    .challenge-decline:hover { background: #b91c1c;}
-#scoreboard-modal {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.88);
-  z-index: 2000;
-  align-items: center;
-  justify-content: center;
-}
-#scoreboard-modal.active {
-  display: flex;
-}
-#scoreboard-list .rank-box {
-  display: flex; align-items:center; justify-content:space-between;
-  background: #222;
-  border-radius: 10px;
-  padding: 10px 16px;
-  margin-bottom: 10px;
-  font-size: 1.12rem;
-  font-weight: bold;
-}
-.rank-box .player-name {
-  border-radius: 8px;
-  padding: 4px 12px;
-  font-weight: bold;
-  font-size:1.06rem;
-  display:inline-block;
-}
-.rank-1   { color: #fff; }
-.rank-2   { color: #eee; }
-.rank-3   { color: #ddd; }
-.rank-4   { color: #ccc; }
-.player-blue   { background: #4a90e2; color: #fff;}
-.player-red    { background: #e94e77; color: #fff;}
-.player-orange { background: #f5a623; color: #181818;}
-.player-green  { background: #7ed321; color: #181818;}
-  .bot-play-button {
-    display: inline-block;
-    padding: 12px 28px;
-    font-size: 1.05rem;
-    font-weight: bold;
-    color: white;
-    background: #3b82f6;
-    border: none;
-    border-radius: 10px;
-    text-decoration: none;
-    transition: background 0.25s ease;
-    margin-top: 20px;
-  }
-  .bot-play-button:hover {
-    background: #2563eb;
-  }
-iframe {
-  border-radius: 50px;
-}
+    /* Minimal styles to separate screens */
+    .screen { display: none; padding: 20px; }
+    .visible { display: block; }
+    #myBoard { width: 480px; margin: 0 auto; }
+    .info { text-align:center; margin-top:10px; }
+    footer { text-align:center; margin-top:20px; color:#666; }
+
+    /* highlights reused from your main.js */
+    .highlight-white { box-shadow: inset 0 0 40px rgba(255,255,255,0.6); }
+    .highlight-black { box-shadow: inset 0 0 40px rgba(0,0,0,0.6); }
   </style>
 </head>
-<body class="min-h-screen flex flex-col">
+<body>
+  <main class="container my-3">
 
-  <div id="notification-bell" title="Friend Requests">🔔</div>
-  <div id="notification-modal">
-    <div id="notification-content">
-      <h2 class="text-2xl font-bold mb-4">Notifications</h2>
-      <div id="notification-list"></div>
-      <button onclick="closeNotificationModal()" class="mt-4 px-5 py-2 bg-red-600 rounded text-white font-semibold hover:bg-red-700">Close</button>
+    <!-- LOGIN SCREEN -->
+    <div id="loginScreen" class="screen visible">
+      <h1 class="text-center">Online Chess (Firebase)</h1>
+      <p class="text-center">Sign in to play with other people in real-time.</p>
+      <div class="text-center">
+        <button id="btnGoogleSignIn" class="btn btn-primary">Sign in with Google</button>
+      </div>
     </div>
-  </div>
-  <div id="challenge-modal">
-    <div id="challenge-content">
-      <div id="challenge-info" class="mb-4"></div>
-      <button id="challenge-accept-btn" class="challenge-btn challenge-accept">Accept</button>
-      <button id="challenge-decline-btn" class="challenge-btn challenge-decline">Decline</button>
-    </div>
-  </div>
 
-  <div id="auth-screen" class="flex-grow flex flex-col items-center justify-center p-4">
-    <h1 class="text-5xl font-extrabold mb-8">Dot and Box Online</h1>
-  <div class="w-full max-w-md bg-gray-800 rounded-xl shadow-lg p-6 flex flex-col gap-4">
-    <div class="flex justify-between mb-2">
-      <button id="show-signup" class="flex-1 py-2 rounded-l-lg bg-gray-700 text-white font-semibold hover:bg-blue-700">Sign Up</button>
-      <button id="show-login" class="flex-1 py-2 rounded-r-lg bg-gray-700 text-white font-semibold hover:bg-green-700">Log In</button>
-    </div>
-    <form id="signup-form" class="flex flex-col gap-3">
-      <h2 class="text-2xl font-bold text-green-400 text-center mb-1">Sign Up</h2>
-      <input id="signup-email" type="email" placeholder="Email" required class="px-4 py-2 rounded bg-gray-900 border border-gray-600 focus:border-green-400 text-white" autocomplete="email">
-      <input id="signup-password" type="password" placeholder="Password" required class="px-4 py-2 rounded bg-gray-900 border border-gray-600 focus:border-green-400 text-white" autocomplete="new-password">
-      <button type="submit" class="bg-green-500 hover:bg-green-600 font-semibold py-2 rounded text-lg mt-1">Sign Up</button>
-      <div id="signup-error" class="text-red-500 text-sm min-h-[20px]"></div>
-      <div class="text-sm text-gray-400 text-center">
-        Already have an account?
-        <span id="goto-login" class="text-blue-400 hover:underline cursor-pointer">Log In</span>
-      </div>
-    </form>
-    <form id="login-form" class="hidden flex flex-col gap-3">
-      <h2 class="text-2xl font-bold text-blue-400 text-center mb-1">Log In</h2>
-      <input id="login-email" type="email" placeholder="Email" required class="px-4 py-2 rounded bg-gray-900 border border-gray-600 focus:border-blue-400 text-white" autocomplete="email">
-      <input id="login-password" type="password" placeholder="Password" required class="px-4 py-2 rounded bg-gray-900 border border-gray-600 focus:border-blue-400 text-white" autocomplete="current-password">
-      <button type="submit" class="bg-blue-500 hover:bg-blue-600 font-semibold py-2 rounded text-lg mt-1">Log In</button>
-      <div id="login-error" class="text-red-500 text-sm min-h-[20px]"></div>
-      <div class="flex items-center justify-between text-sm text-gray-400">
-        <span>
-          Don't have an account?
-          <span id="goto-signup" class="text-green-400 hover:underline cursor-pointer">Sign Up</span>
-        </span>
-        <span>
-          <span id="goto-reset" class="text-yellow-300 hover:underline cursor-pointer">Forgot password?</span>
-        </span>
-      </div>
-    </form>
-    <form id="reset-form" class="hidden flex flex-col gap-3">
-      <h2 class="text-2xl font-bold text-yellow-300 text-center mb-1">Reset Password</h2>
-      <input id="reset-email" type="email" placeholder="Email" required class="px-4 py-2 rounded bg-gray-900 border border-gray-600 focus:border-yellow-400 text-white" autocomplete="email">
-      <button type="submit" class="bg-yellow-400 hover:bg-yellow-500 font-semibold py-2 rounded text-lg mt-1 text-black">Send Reset Link</button>
-      <div id="reset-error" class="text-red-500 text-sm min-h-[20px]"></div>
-      <div id="reset-success" class="text-green-400 text-sm min-h-[20px]"></div>
-      <div class="text-sm text-gray-400 text-center">
-        <span id="goto-login2" class="text-blue-400 hover:underline cursor-pointer">Back to login</span>
-      </div>
-    </form>
-    <div id="verify-email-notice" class="hidden text-center bg-red-900 border border-red-500 text-red-300 p-3 rounded-lg text-sm">
-      Please verify your email address. <br>
-      <button id="resend-verification" class="mt-2 bg-red-600 hover:bg-red-700 px-4 py-1 rounded text-white">Resend Verification Email</button>
-    </div>
-    <div>
-      <button id="signin-btn" class="block mx-auto bg-blue-600 hover:bg-blue-700 px-8 py-3 rounded-lg font-semibold shadow" onclick="signIn()">Sign in with Google</button>
-    </div>
-  </div>
-</div>
-
-  <div id="app" class="hidden flex-grow flex flex-col">
-    <header class="flex justify-between items-center p-4 border-b border-gray-700 relative">
-      <div><span id="username" class="font-bold text-xl"></span> | Rating: <span id="rating" class="font-semibold">0</span></div>
-    </header>
-    <main class="flex-grow overflow-auto p-4">
-      <section id="screen-home" class="space-y-6">
-        <div class="flex justify-center mb-6">
-          <button id="start-btn" class="bg-green-600 hover:bg-green-700 px-8 py-3 rounded-lg font-semibold" onclick="startMatch()">Start Online Game</button>
+    <!-- HOME SCREEN -->
+    <div id="homeScreen" class="screen">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <h3 id="welcomeText"></h3>
+          <p id="userInfo" class="text-muted"></p>
         </div>
-        <div id="match-link" class="text-center mb-6 text-sm text-blue-400 break-all"></div>
-        <div id="chess-board" style="max-width:400px; margin:auto;"></div>
-        <div id="chess-status" class="text-center my-2"></div>
-        <div id="chess-controls" class="flex justify-center gap-2 my-2"></div>
-      </section>
-      <section id="screen-leaderboard" class="hidden">
-        <h2 class="text-3xl font-bold mb-6">Leaderboard</h2>
-        <div id="leaderboard-list" class="space-y-2 max-h-96 overflow-y-auto"></div>
-      </section>
-      <section id="screen-friends" class="hidden">
-        <h2 class="text-3xl font-bold mb-6 text-center">Friends</h2>
-        <input type="text" id="friend-search" placeholder="Search username..." autocomplete="off" />
-        <div id="search-results"></div>
-        <div id="friends-list"></div>
-      </section>
-      <section id="screen-settings" class="hidden">
-        <h2 class="text-3xl font-bold mb-6">Settings</h2>
-      <div class="download-section mb-8 text-center">
-  <h3 class="text-xl font-bold mb-3">Download The Game latest version</h3>
-  <button id="download-game-btn" class="download-btn">
-    <span class="mr-2">⬇️</span> Download APK
-  </button>
+        <div>
+          <button id="btnSignOut" class="btn btn-outline-secondary">Sign out</button>
+        </div>
       </div>
- <div class="bgmusic-settings mt-10 p-4 rounded-xl flex flex-col items-center" style="background:rgba(20,20,34,0.7);border:1px solid #222;">
-  <h3 class="text-lg font-bold mb-4 text-green-400" style="font-family:'Balsamiq Sans',sans-serif;">Volume</h3>
-  <div class="flex items-center w-full justify-between mb-6">
-    <span class="text-base font-semibold mr-3" style="color:#4ade80;">Music</span>
-    <label class="switch">
-      <input type="checkbox" id="music-toggle" checked>
-      <span class="slider"></span>
-    </label>
-  </div>
-  <div class="flex flex-col items-center w-full">
-    <div class="flex items-center justify-between w-full mb-2">
-      <span class="text-sm text-gray-300">0%</span>
-      <span class="text-sm text-gray-300 ml-auto">100%</span>
-    </div>
-    <input type="range" min="0" max="100" value="35" id="volume-slider" class="volume-slider w-full" style="width:100%;">
-  </div>
- </div>
-<div id="create-password-section" class="hidden mt-8 max-w-lg mx-auto bg-gray-800 rounded-xl p-6 shadow flex flex-col gap-3">
-  <h3 class="text-xl font-bold text-green-400 mb-1 text-center">Create a password</h3>
-  <div id="create-password-info" class="text-sm text-gray-400 text-center mb-2">
-    Set a password to enable email login with your Google account.
-  </div>
-  <form id="create-password-form" class="flex flex-col gap-3">
-    <input id="cp-email" type="email" placeholder="Email" class="px-4 py-2 rounded bg-gray-900 border border-gray-700 focus:border-green-400 text-white" readonly />
-    <input id="cp-password" type="password" placeholder="New Password" required class="px-4 py-2 rounded bg-gray-900 border border-gray-700 focus:border-green-400 text-white" autocomplete="new-password">
-    <button type="submit" class="bg-green-500 hover:bg-green-600 font-semibold py-2 rounded text-lg">Set Password</button>
-    <div id="cp-error" class="text-red-500 text-sm min-h-[18px]"></div>
-    <div id="cp-success" class="text-green-400 text-sm min-h-[18px]"></div>
-  </form>
-</div>     
-        <iframe
-    src="https://www.chatbase.co/chatbot-iframe/rVQEKDnSTln45PnFYhHE6"
-    width="400px"
-    style="height: 700px; min-height: 700px"
-        frameborder="0"
-></iframe>
-        <button onclick="signOut()" class="bg-red-600 hover:bg-red-700 px-6 py-3 rounded-lg font-semibold">Sign Out</button>
-      </section>
-    </main>
-    <nav class="bottom-nav">
-      <button id="nav-home" onclick="showScreen('home')" class="active">🏠<br><small>Home</small></button>
-      <button id="nav-leaderboard" onclick="showScreen('leaderboard')">⭐<br><small>Leaderboard</small></button>
-      <button id="nav-friends" onclick="showScreen('friends')">👥<br><small>Friends</small></button>
-      <button id="nav-settings" onclick="showScreen('settings')">⚙️<br><small>Settings</small></button>
-    </nav>
-  </div>
 
-  <div id="modal">
-    <div id="modal-content">
-      <h2 class="text-2xl mb-4">Waiting for other players...</h2>
-      <div class="loader"></div>
-      <p id="players-found" class="mb-4 font-semibold text-lg">Players found: 1/<span id="total-players">2</span></p>
-      <h3 class="mt-2 text-xl font-bold">Current Leaderboard</h3>
-      <div id="modal-leaderboard" class="max-h-48 overflow-y-auto text-left text-sm"></div>
+      <hr/>
+
+      <div class="text-center my-4">
+        <button id="btnStartGame" class="btn btn-success btn-lg">Start Game</button>
+      </div>
+
+      <div class="info">
+        <small>When you click Start Game you'll be put in a waiting queue. When two players are available, they'll be paired automatically.</small>
+      </div>
     </div>
-  </div>
-<div id="scoreboard-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.88); z-index:2000; align-items:center; justify-content:center;">
-  <div style="background:#181818; color:white; border-radius:16px; padding:2rem 2.2rem; max-width:400px; width:90%; text-align:center;">
-    <h2 style="font-size:2rem; font-weight:800; margin-bottom:1.2rem;">Match Result</h2>
-    <div id="scoreboard-list"></div>
-    <button onclick="closeScoreboardModal()" 
-      style="margin-top:1.5rem; padding:10px 32px; font-size:1.1rem; font-weight:700; border:none; border-radius:10px; background:#4ade80; color:#181818; cursor:pointer;">
-      Close
-    </button>
-  </div>
-</div>
-<script>
-const firebaseConfig = {
-  apiKey: "AIzaSyD8z3e5j9y48wJkyU89F7M19cDfxQ4P8uo",
+
+    <!-- WAITING SCREEN -->
+    <div id="waitingScreen" class="screen">
+      <h3 class="text-center">Waiting for an opponent...</h3>
+      <p class="text-center" id="waitingInfo"></p>
+      <div class="text-center my-3">
+        <button id="btnCancelWaiting" class="btn btn-danger">Cancel</button>
+      </div>
+    </div>
+
+    <!-- MATCH SCREEN -->
+    <div id="matchScreen" class="screen">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <div>
+          <h4 id="matchVs"></h4>
+          <p id="matchStatus" class="text-muted"></p>
+        </div>
+        <div>
+          <button id="btnLeaveMatch" class="btn btn-outline-danger">Leave Match</button>
+        </div>
+      </div>
+
+      <div id="myBoard"></div>
+
+      <div class="info">
+        <p>Turn: <span id="turnIndicator"></span> &nbsp; | &nbsp; FEN: <span id="fenDisplay"></span></p>
+        <p><small id="movesLog"></small></p>
+      </div>
+    </div>
+
+  </main>
+
+  <footer>
+    <p>Demo — keep chess.js locally at js/chess.js and chessboard.js via CDN.</p>
+  </footer>
+
+  <!-- Dependencies -->
+  <script src="https://code.jquery.com/jquery-3.5.1.js"
+          crossorigin="anonymous"></script>
+
+  <!-- Firebase v8 CDN (compat-style; simpler for quick demos) -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+  <!-- Chessboard.js (CDN) -->
+  <script defer src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"
+          crossorigin="anonymous"></script>
+
+  <!-- chess.js (YOU SAID you'll keep it in your directory) -->
+  <script defer src="js/chess.js"></script>
+
+  <!-- Main app logic -->
+  <script>
+    // ======= IMPORTANT: Replace with your Firebase config =======
+    var firebaseConfig = {
+      apiKey: "AIzaSyD8z3e5j9y48wJkyU89F7M19cDfxQ4P8uo",
   authDomain: "chess-online-ebc1f.firebaseapp.com",
   databaseURL: "https://chess-online-ebc1f-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "chess-online-ebc1f",
   storageBucket: "chess-online-ebc1f.firebasestorage.app",
   messagingSenderId: "825068912703",
   appId: "1:825068912703:web:48330509c612b8b4cdf88a"
-
 };
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.database();
-firebase.auth().onAuthStateChanged(user => {
-  if (user && user.email === "samiulhaquerafsan@gmail.com") {
-    document.getElementById("train-btn-container").style.display = "block";
-  }
-});
+    // ===========================================================
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.database();
 
-const authScreen = document.getElementById('auth-screen');
-const app = document.getElementById('app');
-const usernameEl = document.getElementById('username');
-const ratingEl = document.getElementById('rating');
-const startBtn = document.getElementById('start-btn');
-const matchLinkEl = document.getElementById('match-link');
-const modal = document.getElementById('modal');
-const modalLeaderboard = document.getElementById('modal-leaderboard');
-const playersFoundEl = document.getElementById('players-found');
-const totalPlayersEl = document.getElementById('total-players');
-const notificationBell = document.getElementById('notification-bell');
-const notificationModal = document.getElementById('notification-modal');
-const notificationList = document.getElementById('notification-list');
-const friendSearchInput = document.getElementById('friend-search');
-const friendsListEl = document.getElementById('friends-list');
-const searchResultsEl = document.getElementById('search-results');
-const challengeModal = document.getElementById('challenge-modal');
-const challengeInfo = document.getElementById('challenge-info');
-const challengeAcceptBtn = document.getElementById('challenge-accept-btn');
-const challengeDeclineBtn = document.getElementById('challenge-decline-btn');
-const screens = {
-  home: document.getElementById('screen-home'),
-  leaderboard: document.getElementById('screen-leaderboard'),
-  friends: document.getElementById('screen-friends'),
-  settings: document.getElementById('screen-settings'),
-};
-const navButtons = {
-  home: document.getElementById('nav-home'),
-  leaderboard: document.getElementById('nav-leaderboard'),
-  friends: document.getElementById('nav-friends'),
-  settings: document.getElementById('nav-settings'),
-};
-const signupForm = document.getElementById('signup-form');
-const loginForm = document.getElementById('login-form');
-const resetForm = document.getElementById('reset-form');
-const showSignupBtn = document.getElementById('show-signup');
-const showLoginBtn = document.getElementById('show-login');
-const gotoLogin = document.getElementById('goto-login');
-const gotoSignup = document.getElementById('goto-signup');
-const gotoReset = document.getElementById('goto-reset');
-const gotoLogin2 = document.getElementById('goto-login2');
-const verifyEmailNotice = document.getElementById('verify-email-notice');
-const resendVerificationBtn = document.getElementById('resend-verification');
-const createPasswordSection = document.getElementById('create-password-section');
-const cpForm = document.getElementById('create-password-form');
-const cpEmail = document.getElementById('cp-email');
-const cpPassword = document.getElementById('cp-password');
-const cpError = document.getElementById('cp-error');
-const cpSuccess = document.getElementById('cp-success');
+    // UI refs
+    const loginScreen = document.getElementById('loginScreen');
+    const homeScreen = document.getElementById('homeScreen');
+    const waitingScreen = document.getElementById('waitingScreen');
+    const matchScreen = document.getElementById('matchScreen');
 
-function showAuthTab(tab) {
-  signupForm.classList.toggle('hidden', tab !== 'signup');
-  loginForm.classList.toggle('hidden', tab !== 'login');
-  resetForm.classList.toggle('hidden', tab !== 'reset');
-  verifyEmailNotice.classList.add('hidden');
-  if(showSignupBtn && showLoginBtn) {
-    showSignupBtn.classList.toggle('bg-blue-700', tab === 'signup');
-    showLoginBtn.classList.toggle('bg-green-700', tab === 'login');
-  }
-}
-if(showSignupBtn) showSignupBtn.onclick = () => showAuthTab('signup');
-if(showLoginBtn) showLoginBtn.onclick = () => showAuthTab('login');
-if(gotoLogin) gotoLogin.onclick = () => showAuthTab('login');
-if(gotoSignup) gotoSignup.onclick = () => showAuthTab('signup');
-if(gotoReset) gotoReset.onclick = () => showAuthTab('reset');
-if(gotoLogin2) gotoLogin2.onclick = () => showAuthTab('login');
-showAuthTab('signup');
+    const btnGoogleSignIn = document.getElementById('btnGoogleSignIn');
+    const btnSignOut = document.getElementById('btnSignOut');
+    const welcomeText = document.getElementById('welcomeText');
+    const userInfo = document.getElementById('userInfo');
+    const btnStartGame = document.getElementById('btnStartGame');
+    const btnCancelWaiting = document.getElementById('btnCancelWaiting');
 
-signupForm.addEventListener('submit', async function(e) {
-  e.preventDefault();
-  const email = document.getElementById('signup-email').value.trim();
-  const password = document.getElementById('signup-password').value;
-  const errorDiv = document.getElementById('signup-error');
-  errorDiv.textContent = '';
-  if(!email || !password) {
-    errorDiv.textContent = 'Please enter email & password.';
-    return;
-  }
-  try {
-    const cred = await auth.createUserWithEmailAndPassword(email, password);
-    if(cred.user) {
-      let username = cred.user.displayName || email.split('@')[0] || 'Anonymous';
-      await cred.user.updateProfile({displayName: username});
-      await db.ref('users/' + cred.user.uid).set({
-        username: username,
-        rating: 1000,
-        friends: {},
-        friendRequests: {},
-        online: false,
-      });
-      await cred.user.sendEmailVerification();
-      verifyEmailNotice.classList.remove('hidden');
-      signupForm.classList.add('hidden');
-      errorDiv.textContent = '';
+    const waitingInfo = document.getElementById('waitingInfo');
+
+    const matchVs = document.getElementById('matchVs');
+    const matchStatus = document.getElementById('matchStatus');
+    const turnIndicator = document.getElementById('turnIndicator');
+    const fenDisplay = document.getElementById('fenDisplay');
+    const movesLog = document.getElementById('movesLog');
+    const btnLeaveMatch = document.getElementById('btnLeaveMatch');
+
+    // state
+    let currentUser = null;
+    let waitingRef = null;   // firebase ref node for this user's waiting entry
+    let waitingKey = null;
+    let myWaitingListener = null;
+    let pairListener = null;
+
+    let matchId = null;
+    let matchRef = null;
+    let matchMovesRef = null;
+    let matchListener = null;
+    let matchMovesChildListener = null;
+
+    // chessboard + chess.js variables (will initialize once match starts)
+    let board = null;
+    let boardConfig = null;
+    let game = null;
+    let myColor = null; // 'w' or 'b'
+    let localApplyingRemoteMove = false; // to avoid double-applying moves we ourselves pushed
+
+    // Helper: show a screen
+    function showScreen(screen) {
+      [loginScreen, homeScreen, waitingScreen, matchScreen].forEach(s => s.classList.remove('visible'));
+      screen.classList.add('visible');
     }
-  } catch(err) {
-    errorDiv.textContent = err.message.replace('Firebase:', '').replace(/\(auth.*\)/, '');
-  }
-});
-if(resendVerificationBtn) {
-  resendVerificationBtn.onclick = async function() {
-    if(auth.currentUser) {
-      try {
-        await auth.currentUser.sendEmailVerification();
-        resendVerificationBtn.textContent = "Sent!";
-        setTimeout(()=>{resendVerificationBtn.textContent = "Resend Verification Email";}, 3000);
-      } catch (err) {
-        resendVerificationBtn.textContent = "Error!";
-      }
-    }
-  };
-}
-loginForm.addEventListener('submit', async function(e) {
-  e.preventDefault();
-  const email = document.getElementById('login-email').value.trim();
-  const password = document.getElementById('login-password').value;
-  const errorDiv = document.getElementById('login-error');
-  errorDiv.textContent = '';
-  try {
-    const cred = await auth.signInWithEmailAndPassword(email, password);
-    if(cred.user && !cred.user.emailVerified) {
-      errorDiv.textContent = '';
-      loginForm.classList.add('hidden');
-      verifyEmailNotice.classList.remove('hidden');
-      await auth.signOut();
-      return;
-    }
-  } catch(err) {
-    errorDiv.textContent = err.message.replace('Firebase:', '').replace(/\(auth.*\)/, '');
-  }
-});
-resetForm.addEventListener('submit', async function(e) {
-  e.preventDefault();
-  const email = document.getElementById('reset-email').value.trim();
-  const errorDiv = document.getElementById('reset-error');
-  const successDiv = document.getElementById('reset-success');
-  errorDiv.textContent = '';
-  successDiv.textContent = '';
-  if(!email) {
-    errorDiv.textContent = 'Please enter your email.';
-    return;
-  }
-  try {
-    await auth.sendPasswordResetEmail(email);
-    successDiv.textContent = 'A reset link has been sent to your email.';
-  } catch(err) {
-    errorDiv.textContent = err.message.replace('Firebase:', '').replace(/\(auth.*\)/, '');
-  }
-});
-let currentUser = null;
-let userData = null;
-let selectedMode = 2;
-let gameData = null;
-let playerIndex = null;
-let matchId = null;
-let isMyTurn = false;
-let players = [];
-let playersInfo = {};
-let finished = false;
-let onlineUsers = {};
-let challengeState = null;
-let matchCleanupScheduled = false;
 
-auth.onAuthStateChanged(async user => {
-  if (user) {
-    if (user.providerData[0].providerId === 'password' && !user.emailVerified) {
-      await auth.signOut();
-      showAuthTab('login');
-      if (verifyEmailNotice) verifyEmailNotice.classList.remove('hidden');
-      return;
-    }
-    currentUser = user;
-    await loadUserData();
-    setOnlineStatus(true);
-    authScreen.style.display = 'none';
-    app.classList.remove('hidden');
-    showScreen('home');
-    setupInitialUI();
-    listenFriendRequests();
-    listenChallenges();
-    listenLeaderboard();
-    listenOnlineUsers();
-    window.addEventListener("beforeunload", ()=>setOnlineStatus(false));
-  } else {
-    setOnlineStatus(false);
-    currentUser = null;
-    userData = null;
-    app.classList.add('hidden');
-    authScreen.style.display = 'flex';
-    showAuthTab('signup');
-  }
-});
+    // Firebase Auth: Google Sign In
+    btnGoogleSignIn.addEventListener('click', () => {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      auth.signInWithPopup(provider).catch(err => alert('Sign in error: ' + err.message));
+    });
 
-async function loadUserData() {
-  if (!currentUser) return;
-  const snapshot = await db.ref('users/' + currentUser.uid).get();
-  if (snapshot.exists()) {
-    userData = snapshot.val();
-  } else {
-    userData = {
-      username: currentUser.displayName || 'Anonymous',
-      rating: 1000,
-      friends: {},
-      friendRequests: {},
-      online: false,
-    };
-    await db.ref('users/' + currentUser.uid).set(userData);
-  }
-  usernameEl.textContent = userData.username;
-  ratingEl.textContent = userData.rating || 0;
-}
-
-function setOnlineStatus(status) {
-  if (!auth.currentUser) return;
-  db.ref('users/' + auth.currentUser.uid + '/online').set(status);
-}
-
-function signIn() {
-  const provider = new firebase.auth.GoogleAuthProvider();
-  auth.signInWithPopup(provider);
-}
-function signOut() {
-  setOnlineStatus(false);
-  auth.signOut();
-}
-function checkCreatePasswordEligibility() {
-  if (!currentUser) return createPasswordSection.classList.add('hidden');
-  const providers = (currentUser.providerData || []).map(p => p.providerId);
-  if (providers.includes('google.com') && !providers.includes('password') && currentUser.email) {
-    createPasswordSection.classList.remove('hidden');
-    cpEmail.value = currentUser.email;
-  } else {
-    createPasswordSection.classList.add('hidden');
-  }
-}
-if (typeof showScreen === "function") {
-  const _showScreen = showScreen;
-  showScreen = function(name) {
-    _showScreen(name);
-    if(name === 'settings') checkCreatePasswordEligibility();
-  }
-}
-if (cpForm) {
-  cpForm.addEventListener('submit', async function(e) {
-    e.preventDefault();
-    cpError.textContent = '';
-    cpSuccess.textContent = '';
-    const email = cpEmail.value.trim();
-    const password = cpPassword.value;
-    if (!email || !password) {
-      cpError.textContent = 'Please enter a valid password.';
-      return;
-    }
-    const credential = firebase.auth.EmailAuthProvider.credential(email, password);
-    try {
-      await currentUser.linkWithCredential(credential);
-      cpSuccess.textContent = 'Password created! You can now log in with email & password.';
-      cpForm.reset();
-      setTimeout(() => {
-        checkCreatePasswordEligibility();
-        cpSuccess.textContent = '';
-      }, 2000);
-    } catch (err) {
-      if (err.code === 'auth/credential-already-in-use') {
-        cpError.textContent = 'This email already has a password.';
-      } else if (err.code === 'auth/weak-password') {
-        cpError.textContent = 'Password should be at least 6 characters.';
+    btnSignOut.addEventListener('click', () => {
+      if (currentUser) {
+        // cleanup presence / waiting
+        cancelWaiting().finally(() => {
+          auth.signOut();
+        });
       } else {
-        cpError.textContent = err.message.replace('Firebase:', '').replace(/\(auth.*\)/, '');
-      }
-    }
-  });
-}
-
-function showScreen(name) {
-  for (const key in screens) {
-    screens[key].classList.toggle('hidden', key !== name);
-  }
-  for (const key in navButtons) {
-    navButtons[key].classList.toggle('active', key === name);
-  }
-  if (name === 'friends') {
-    loadFriends();
-    clearSearchResults();
-  } else if (name === 'leaderboard') {
-    renderLeaderboard();
-  }
-  if (matchId && screens.home.classList.contains('hidden') && screens.leaderboard.classList.contains('hidden') &&
-      screens.friends.classList.contains('hidden') && screens.settings.classList.contains('hidden')) {
-    scheduleMatchCleanup();
-  } else if (matchId && name !== 'home') {
-    scheduleMatchCleanup();
-  }
-}
-function scheduleMatchCleanup() {
-  if (!matchId || matchCleanupScheduled) return;
-  matchCleanupScheduled = true;
-  setTimeout(() => {
-    db.ref('matches/' + matchId).remove();
-    matchId = null;
-    matchCleanupScheduled = false;
-  }, 1200);
-}
-function startMatch() {
-  if (!currentUser) return alert('Please sign in first.');
-  startBtn.disabled = true;
-  createOrJoinMatch(2);
-}
-async function createOrJoinMatch(mode) {
-  modal.classList.add('active');
-  modalLeaderboard.innerHTML = '';
-  playersFoundEl.textContent = `Players found: 1/${mode}`;
-  let openMatchId = null;
-  const matchesSnapshot = await db.ref('matches').orderByChild('mode').equalTo(mode).get();
-  if (matchesSnapshot.exists()) {
-    matchesSnapshot.forEach(matchSnap => {
-      const m = matchSnap.val();
-      if (!m.started && Object.keys(m.players || {}).length < mode) {
-        openMatchId = matchSnap.key;
-        return true;
+        auth.signOut();
       }
     });
-  }
-  if (openMatchId) {
-    matchId = openMatchId;
-    await joinMatch(matchId);
-  } else {
-    const newMatchRef = db.ref('matches').push();
-    matchId = newMatchRef.key;
-    const playersObj = {};
-    playersObj[currentUser.uid] = {
-      username: userData.username,
-      rating: userData.rating || 0,
-      score: 0,
-    };
-    await newMatchRef.set({
-      mode,
-      started: false,
-      players: playersObj,
-      fen: null,
-      lastMove: null,
-      turn: 'w'
+
+    auth.onAuthStateChanged(user => {
+      currentUser = user;
+      if (user) {
+        // store minimal profile in db
+        db.ref('users/' + user.uid + '/profile').update({
+          displayName: user.displayName || '',
+          email: user.email || ''
+        });
+        // set presence
+        const presenceRef = db.ref('users/' + user.uid + '/presence');
+        presenceRef.set(true);
+        presenceRef.onDisconnect().remove();
+
+        welcomeText.textContent = `Welcome, ${user.displayName || 'Player'}`;
+        userInfo.textContent = `UID: ${user.uid}`;
+
+        showScreen(homeScreen);
+        // watch if user gets assigned a match (so pairing can redirect)
+        db.ref('users/' + user.uid + '/currentMatch').on('value', snap => {
+          const assigned = snap.val();
+          if (assigned) {
+            // open match screen
+            enterMatch(assigned);
+          }
+        });
+      } else {
+        // not signed in
+        showScreen(loginScreen);
+      }
     });
-    await waitForPlayers(matchId, mode);
-  }
-}
-async function joinMatch(id) {
-  const matchRef = db.ref('matches/' + id);
-  const matchSnap = await matchRef.get();
-  if (!matchSnap.exists()) {
-    alert('Match not found');
-    modal.classList.remove('active');
-    startBtn.disabled = false;
-    return;
-  }
-  const match = matchSnap.val();
-  if (match.started) {
-    alert('Match already started');
-    modal.classList.remove('active');
-    startBtn.disabled = false;
-    return;
-  }
-  if (match.players && Object.keys(match.players).includes(currentUser.uid)) {
-    listenToMatch(matchId);
-    return;
-  }
-  await matchRef.child('players/' + currentUser.uid).set({
-    username: userData.username,
-    rating: userData.rating || 0,
-    score: 0,
-  });
-  await waitForPlayers(id, match.mode);
-}
-async function waitForPlayers(id, mode) {
-  totalPlayersEl.textContent = mode;
-  const matchRef = db.ref('matches/' + id);
-  matchRef.on('value', snapshot => {
-    if (!snapshot.exists()) return;
-    const data = snapshot.val();
-    players = Object.keys(data.players || {});
-    playersInfo = data.players || {};
-    playersFoundEl.textContent = `Players found: ${players.length}/${mode}`;
-    renderModalLeaderboard();
-    if (players.length === mode && !data.started) {
-      matchRef.update({ started: true });
-    }
-    if (data.started) {
-      modal.classList.remove('active');
-      listenToMatch(id);
-    }
-  });
-}
-function renderModalLeaderboard() {
-  modalLeaderboard.innerHTML = '';
-  players.forEach(uid => {
-    const p = playersInfo[uid];
-    const div = document.createElement('div');
-    div.textContent = `${p.username} (Rating: ${p.rating || 0}) - Score: ${p.score || 0}`;
-    modalLeaderboard.appendChild(div);
-  });
-}
 
-let chess = null;
-let chessBoard = null;
-let myColor = "white";
-let chessGameActive = false;
-function startChessGame(matchData) {
-  const playerUids = Object.keys(matchData.players);
-  if (playerUids.length < 2) return;
-  myColor = (playerUids[0] === currentUser.uid) ? "white" : "black";
-  chess = new Chess();
-  chessBoard = Chessboard('chess-board', {
-    draggable: true,
-    position: 'start',
-    orientation: myColor,
-    onDrop: handleChessMove,
-  });
-  chessGameActive = true;
-  document.getElementById('chess-status').innerText = "Your turn: " + (myColor === "white" ? "White" : "Black");
-  document.getElementById('chess-controls').innerHTML = `<button onclick="restartChessGame()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded">Restart</button>`;
-  if (matchData.fen) {
-    chess.load(matchData.fen);
-    chessBoard.position(matchData.fen);
-  }
-}
-function handleChessMove(source, target) {
-  if (!chessGameActive) return 'snapback';
-  if ((chess.turn() === "w" && myColor !== "white") || (chess.turn() === "b" && myColor !== "black")) {
-    return "snapback";
-  }
-  let move = chess.move({ from: source, to: target, promotion: 'q' });
-  if (move == null) return "snapback";
-  db.ref('matches/' + matchId).update({
-    fen: chess.fen(),
-    lastMove: move.san,
-    turn: chess.turn(),
-  });
-  updateChessStatus();
-}
-function updateChessFromFirebase(fen, turn) {
-  if (!chess) return;
-  chess.load(fen);
-  chessBoard.position(fen);
-  updateChessStatus();
-}
-function updateChessStatus() {
-  let status = "";
-  if (chess.in_checkmate()) {
-    status = "Checkmate! Winner: " + (chess.turn() === "w" ? "Black" : "White");
-  } else if (chess.in_draw()) {
-    status = "Draw!";
-  } else if (chess.in_check()) {
-    status = (chess.turn() === "w" ? "White" : "Black") + " in check";
-  } else {
-    status = "Turn: " + (chess.turn() === "w" ? "White" : "Black");
-  }
-  document.getElementById('chess-status').innerText = status;
-}
-function restartChessGame() {
-  chess.reset();
-  chessBoard.position('start');
-  db.ref('matches/' + matchId).update({
-    fen: chess.fen(),
-    lastMove: "",
-    turn: chess.turn()
-  });
-}
-function listenToMatch(id) {
-  matchId = id;
-  const matchRef = db.ref('matches/' + id);
-  finished = false;
-  matchRef.on('value', async snapshot => {
-    if (!snapshot.exists()) return;
-    const matchData = snapshot.val();
-    players = Object.keys(matchData.players || {});
-    playersInfo = matchData.players || {};
-    if (matchData.started) {
-      if (!chessGameActive) startChessGame(matchData);
-      if (matchData.fen) updateChessFromFirebase(matchData.fen, matchData.turn);
-    }
-  });
-}
-// ----------- Friends & Notification Improvements -----------
-    async function loadFriends() {
-      if (!currentUser) return;
-      friendsListEl.innerHTML = '';
-      if (!userData.friends) userData.friends = {};
-      const friendIds = Object.keys(userData.friends);
-      if (friendIds.length === 0) {
-        friendsListEl.textContent = 'You have no friends yet.';
-        return;
-      }
-      for (const fid of friendIds) {
-        const snap = await db.ref('users/' + fid).get();
-        if (!snap.exists()) continue;
-        const f = snap.val();
-        const online = f.online ? true : false;
-        const friendDiv = createFriendItem(fid, f.username, f.rating || 0, online);
-        friendsListEl.appendChild(friendDiv);
-      }
-    }
-
-    function createFriendItem(uid, username, rating, online) {
-      const div = document.createElement('div');
-      div.className = 'friend-item';
-      div.innerHTML = `
-        <img class="friend-pic" src="https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=4a90e2&color=fff&rounded=true&size=48" alt=""/>
-        <div class="friend-info">
-          <div class="friend-name">${username}
-            ${online ? '<span class="online-badge" title="Online"></span>' : '<span class="offline-badge" title="Offline"></span>'}
-          </div>
-          <div class="friend-rating">Rating: ${rating}</div>
-        </div>
-        <div class="remove-btn" onclick="removeFriend('${uid}')">✖️</div>
-        ${online ? `<button class="add-btn" onclick="sendChallenge('${uid}')">🎮</button>` : ''}
-      `;
-      return div;
-    }
-    async function removeFriend(uid) {
-      if (!currentUser) return;
-      await db.ref(`users/${currentUser.uid}/friends/${uid}`).remove();
-      await loadUserData();
-      await loadFriends();
-    }
-    function clearSearchResults() { searchResultsEl.innerHTML = ''; }
-
-    friendSearchInput.addEventListener('input', async function() {
-      const query = this.value.trim().toLowerCase();
-      clearSearchResults();
-      if (!query) return;
-      const snap = await db.ref('users').get();
-      if (!snap.exists()) return;
-      snap.forEach(s => {
-        const u = s.val();
-        if (s.key === currentUser.uid || (userData.friends && userData.friends[s.key])) return;
-        if (!u.username || !u.username.toLowerCase().includes(query)) return;
-        const div = document.createElement('div');
-        div.className = 'search-item';
-        div.innerHTML = `
-          <img class="search-pic" src="https://ui-avatars.com/api/?name=${encodeURIComponent(u.username)}&background=4a90e2&color=fff&rounded=true&size=48" alt=""/>
-          <div class="search-info">
-            <div class="search-name">${u.username}</div>
-            <div class="search-rating">Rating: ${u.rating || 0}</div>
-          </div>
-          <div class="add-btn" onclick="sendFriendRequest('${s.key}')">+</div>
-        `;
-        searchResultsEl.appendChild(div);
+    // Start game: push into waiting queue
+    btnStartGame.addEventListener('click', async () => {
+      if (!currentUser) return alert('Please sign in first.');
+      // push waiting entry with timestamp; set onDisconnect to remove
+      waitingRef = db.ref('waiting').push();
+      waitingKey = waitingRef.key;
+      await waitingRef.set({
+        uid: currentUser.uid,
+        name: currentUser.displayName || '',
+        ts: firebase.database.ServerValue.TIMESTAMP
       });
+      waitingRef.onDisconnect().remove();
+
+      // show waiting screen and start watching queue for pairing
+      waitingInfo.textContent = 'You are waiting...';
+      showScreen(waitingScreen);
+
+      // Listen to the whole waiting list; when count >= 2 try to pair (with a lock)
+      if (!pairListener) {
+        pairListener = db.ref('waiting');
+        pairListener.on('value', snapshot => {
+          const waiting = snapshot.val() || {};
+          const keys = Object.keys(waiting);
+          if (keys.length >= 2) {
+            tryPairing(); // attempt pairing (acquire lock)
+          }
+        });
+      }
     });
 
-    function listenOnlineUsers() {
-      db.ref('users').on('value', snap => {
-        onlineUsers = {};
-        if (snap.exists()) {
-          snap.forEach(userSnap => {
-            const d = userSnap.val();
-            onlineUsers[userSnap.key] = d.online ? true : false;
-          });
+    async function cancelWaiting() {
+      if (waitingRef) {
+        try { await waitingRef.remove(); } catch (e) { /* ignore */ }
+        waitingRef = null;
+        waitingKey = null;
+      }
+      if (pairListener) {
+        pairListener.off();
+        pairListener = null;
+      }
+      showScreen(homeScreen);
+    }
+
+    btnCancelWaiting.addEventListener('click', () => {
+      cancelWaiting();
+    });
+
+    // Pairing: acquire lock then form a match from two oldest waiting entries
+    function tryPairing() {
+      const myUid = currentUser ? currentUser.uid : null;
+      if (!myUid) return;
+
+      const lockRef = db.ref('pairingLock');
+      lockRef.transaction(current => {
+        if (current === null) {
+          return myUid; // set lock to our uid
+        } else {
+          return; // someone else holds lock
         }
-        if (!screens.friends.classList.contains('hidden')) loadFriends();
-      });
-    }
-
-    function listenFriendRequests() {
-      db.ref('users/' + currentUser.uid + '/friendRequests').on('value', snap => {
-        notificationList.innerHTML = '';
-        if (!snap.exists()) return;
-        const reqs = snap.val();
-        for (const fromId in reqs) {
-          db.ref('users/' + fromId).get().then(userSnap => {
-            if (!userSnap.exists()) return;
-            const user = userSnap.val();
-            const div = document.createElement('div');
-            div.className = 'notification-item';
-            div.innerHTML = `
-              <span class="notification-text">${user.username} wants to be your friend.</span>
-              <span>
-                <span class="notif-btn accept" onclick="acceptFriendRequest('${fromId}')">✔️</span>
-                <span class="notif-btn decline" onclick="declineFriendRequest('${fromId}')">✖️</span>
-              </span>
-            `;
-            notificationList.appendChild(div);
-          });
+      }, async (error, committed, snapshot) => {
+        if (error) {
+          // console.error('Lock transaction error', error);
+          return;
         }
-      });
-    }
-    function sendFriendRequest(uid) {
-      db.ref('users/' + uid + '/friendRequests/' + currentUser.uid).set(true);
-      alert('Friend request sent!');
-    }
-    function acceptFriendRequest(fromId) {
-      db.ref(`users/${currentUser.uid}/friends/${fromId}`).set(true);
-      db.ref(`users/${fromId}/friends/${currentUser.uid}`).set(true);
-      db.ref(`users/${currentUser.uid}/friendRequests/${fromId}`).remove();
-      loadUserData();
-      loadFriends();
-      notificationModal.classList.remove('active');
-    }
-    function declineFriendRequest(fromId) {
-      db.ref(`users/${currentUser.uid}/friendRequests/${fromId}`).remove();
-      notificationModal.classList.remove('active');
-    }
-    notificationBell.onclick = () => { notificationModal.classList.add('active'); }
-    function closeNotificationModal() { notificationModal.classList.remove('active'); }
-    function setupInitialUI() {
-      modeButtons.forEach(btn => btn.classList.remove('active'));
-      document.getElementById('mode-' + selectedMode).classList.add('active');
-      totalPlayersEl.textContent = selectedMode;
-      restartBtn.style.display = 'none';
-      winnerMessage.textContent = '';
-      scoresEl.innerHTML = '';
-      statusEl.textContent = '';
-      matchLinkEl.textContent = '';
-      finished = false;
-    }
-
-    function sendChallenge(friendUid) {
-      const challengeObj = {
-        from: currentUser.uid,
-        fromName: userData.username,
-        timestamp: Date.now(),
-        mode: selectedMode,
-        participants: [currentUser.uid],
-        status: "pending"
-      };
-      db.ref('users/' + friendUid + '/challenges/' + currentUser.uid).set(challengeObj);
-      alert('Challenge sent!');
-    }
-
-    function listenChallenges() {
-      db.ref('users/' + auth.currentUser.uid + '/challenges').on('value', snap => {
-        if (!snap.exists()) { challengeModal.classList.remove('active'); return; }
-        const challenges = snap.val();
-        for (const fromId in challenges) {
-          const ch = challenges[fromId];
-          if (ch.status === "pending") {
-            challengeState = {fromId, challenge: ch};
-            challengeInfo.innerHTML = `
-              <div class="mb-2 font-bold text-lg">${ch.fromName} challenged you!</div>
-              <div class="mb-2">Players: ${ch.participants.map(uid=>uid===currentUser.uid?"You":(leaderboardData[uid]?.username||uid)).join(', ')}</div>
-              <div class="mb-2">Mode: ${ch.mode} Players</div>
-              <div class="mb-2">Do you want to join?</div>
-            `;
-            challengeAcceptBtn.onclick = ()=>acceptChallenge(fromId, ch);
-            challengeDeclineBtn.onclick = ()=>declineChallenge(fromId);
-            challengeModal.classList.add('active');
+        if (!committed) {
+          return; // didn't acquire lock
+        }
+        // We acquired lock. Now read waiting and create match.
+        try {
+          const waitingSnap = await db.ref('waiting').orderByChild('ts').once('value');
+          const waiting = waitingSnap.val() || {};
+          const keys = Object.keys(waiting);
+          if (keys.length < 2) {
+            // nothing to do
+            await db.ref('pairingLock').remove();
             return;
           }
+          // pick first two by timestamp (ordered already by orderByChild)
+          const firstKey = keys[0];
+          const secondKey = keys[1];
+          const p1 = waiting[firstKey];
+          const p2 = waiting[secondKey];
+
+          // Create match entry
+          const matchesRef = db.ref('matches').push();
+          const newMatchId = matchesRef.key;
+
+          // assign colors: first -> white, second -> black
+          const matchObj = {
+            fen: (new Chess()).fen ? (new Chess()).fen() : undefined, // start fen (makes new chess obj)
+            turn: 'w',
+            createdAt: firebase.database.ServerValue.TIMESTAMP,
+            players: {
+              white: { uid: p1.uid, name: p1.name || '' },
+              black: { uid: p2.uid, name: p2.name || '' }
+            }
+          };
+
+          await matchesRef.set(matchObj);
+
+          // notify both players by setting users/{uid}/currentMatch
+          const updates = {};
+          updates['users/' + p1.uid + '/currentMatch'] = newMatchId;
+          updates['users/' + p2.uid + '/currentMatch'] = newMatchId;
+
+          // remove from waiting
+          updates['waiting/' + firstKey] = null;
+          updates['waiting/' + secondKey] = null;
+
+          await db.ref().update(updates);
+
+          // release lock
+          await db.ref('pairingLock').remove();
+        } catch (e) {
+          // cleanup lock on error
+          await db.ref('pairingLock').remove();
         }
-        challengeModal.classList.remove('active');
       });
     }
 
-    async function acceptChallenge(fromId, ch) {
-      if (!ch.participants.includes(currentUser.uid)) {
-        ch.participants.push(currentUser.uid);
+    // ENTER MATCH: listen to match data and moves
+    async function enterMatch(id) {
+      matchId = id;
+      matchRef = db.ref('matches/' + matchId);
+      matchMovesRef = db.ref('matches/' + matchId + '/moves');
+
+      // fetch match once to get players and determine my color
+      const snap = await matchRef.once('value');
+      const match = snap.val();
+      if (!match) {
+        alert('Match no longer exists.');
+        db.ref('users/' + currentUser.uid + '/currentMatch').remove();
+        showScreen(homeScreen);
+        return;
       }
-      db.ref(`users/${auth.currentUser.uid}/challenges/${fromId}/status`).set('accepted');
-      db.ref(`users/${fromId}/challenges/${auth.currentUser.uid}/status`).set('accepted');
-      setTimeout(()=>{
-        db.ref(`users/${auth.currentUser.uid}/challenges/${fromId}`).remove();
-        challengeModal.classList.remove('active');
-        alert('You accepted the challenge! Please arrange match with your friend.');
-      },600);
-    }
-    function declineChallenge(fromId) {
-      db.ref(`users/${auth.currentUser.uid}/challenges/${fromId}/status`).set('declined');
-      setTimeout(()=>{
-        db.ref(`users/${auth.currentUser.uid}/challenges/${fromId}`).remove();
-        challengeModal.classList.remove('active');
-      },600);
-    }
 
-    window.addEventListener("resize", ()=>{ renderGameBoard(); });
-document.getElementById('download-game-btn').onclick = function() {
-  window.location.href = 'dotAndBox.apk';
-};
-    // --- Background Music Logic ---
-let bgAudio;
-let musicIsPlaying = false;
-let musicEnabled = true;
-let musicVolume = 0.35; // default 60%
+      // determine color
+      if (match.players.white.uid === currentUser.uid) {
+        myColor = 'w';
+      } else if (match.players.black.uid === currentUser.uid) {
+        myColor = 'b';
+      } else {
+        // spectator or error
+        myColor = 'spectator';
+      }
 
-// Create and setup audio element
-function setupBgAudio() {
-  if (bgAudio) return; // Don't double-create
-  bgAudio = document.createElement('audio');
-  bgAudio.src = 'bg.mp3';
-  bgAudio.loop = true;
-  bgAudio.volume = musicVolume;
-  bgAudio.preload = 'auto';
-  document.body.appendChild(bgAudio);
-}
+      matchVs.textContent = `${match.players.white.name || 'White'} (White)  vs  ${match.players.black.name || 'Black'} (Black)`;
+      matchStatus.textContent = `You are playing as ${myColor === 'w' ? 'White' : myColor === 'b' ? 'Black' : 'Spectator'}.`;
 
-// Start music after 5 seconds
-setTimeout(() => {
-  setupBgAudio();
-  if (musicEnabled) {
-    bgAudio.volume = musicVolume;
-    bgAudio.play();
-    musicIsPlaying = true;
-  }
-}, 5000);
+      // Prepare chessboard + game if not already
+      if (!game) game = new Chess(); // chess.js provided locally
 
-// --- Music Toggle ---
-const musicToggle = document.getElementById('music-toggle');
-if (musicToggle) {
-  musicToggle.addEventListener('change', function() {
-    musicEnabled = this.checked;
-    setupBgAudio();
-    if (musicEnabled) {
-      bgAudio.volume = musicVolume;
-      if (!musicIsPlaying) bgAudio.play();
-      musicIsPlaying = true;
-    } else {
-      if (musicIsPlaying) bgAudio.pause();
-      musicIsPlaying = false;
-    }
-  });
-}
+      // if match has fen set, load it, otherwise start fresh
+      if (match.fen) {
+        game.load(match.fen);
+      } else {
+        game.reset();
+      }
 
-// --- Volume Slider ---
-const volumeSlider = document.getElementById('volume-slider');
-if (volumeSlider) {
-  volumeSlider.addEventListener('input', function() {
-    musicVolume = this.value / 100;
-    setupBgAudio();
-    bgAudio.volume = musicVolume;
-  });
+      // initialize board
+      if (!board) {
+        boardConfig = {
+          draggable: true,
+          position: game.fen(),
+          onDragStart: onDragStart,
+          onDrop: onDrop,
+          onSnapEnd: onSnapEnd
+        };
+        board = Chessboard('myBoard', boardConfig);
+      } else {
+        board.position(game.fen());
+      }
+
+      updateMatchUI(match);
+
+      // listen for match updates (fen, turn, players)
+      if (matchListener) matchListener.off();
+      matchListener = matchRef.on('value', snap => {
+        const data = snap.val();
+        if (!data) return;
+        // update UI
+        updateMatchUI(data);
+      });
+
+      // listen for moves appended
+      if (matchMovesChildListener) matchMovesRef.off('child_added', matchMovesChildListener);
+      matchMovesChildListener = matchMovesRef.on('child_added', snap => {
+        const moveObj = snap.val();
+        if (!moveObj) return;
+        // If it's our own move that we already applied locally, ignore applying again.
+        if (moveObj.authorUid === currentUser.uid) {
+          return;
         }
-    // --- Restore volume and music toggle from localStorage ---
-window.addEventListener('DOMContentLoaded', function() {
-  // Restore volume slider
-  const savedVolume = localStorage.getItem('bgmusic-volume');
-  const volumeSlider = document.getElementById('volume-slider');
-  if (volumeSlider && savedVolume !== null) {
-    volumeSlider.value = savedVolume;
-    musicVolume = savedVolume / 100;
-    if (bgAudio) bgAudio.volume = musicVolume;
-  }
+        applyRemoteMove(moveObj);
+      });
 
-  // Restore music toggle
-  const savedMusicToggle = localStorage.getItem('bgmusic-toggle');
-  const musicToggle = document.getElementById('music-toggle');
-  if (musicToggle && savedMusicToggle !== null) {
-    const checked = savedMusicToggle === 'true';
-    musicToggle.checked = checked;
-    musicEnabled = checked;
-    setupBgAudio();
-    if (musicEnabled) {
-      bgAudio.volume = musicVolume;
-      if (!musicIsPlaying) bgAudio.play();
-      musicIsPlaying = true;
-    } else {
-      if (musicIsPlaying) bgAudio.pause();
-      musicIsPlaying = false;
+      showScreen(matchScreen);
     }
-  }
-});
 
-
-      document.addEventListener('contextmenu', event => event.preventDefault());
-  document.onkeydown = function(e) {
-    if(e.key === "F12" || 
-       (e.ctrlKey && e.shiftKey && ['I','J','C'].includes(e.key)) || 
-       (e.ctrlKey && e.key === 'U')) {
-      return false;
+    function updateMatchUI(matchData) {
+      fenDisplay.textContent = matchData.fen || '';
+      turnIndicator.textContent = matchData.turn === 'w' ? 'White' : 'Black';
+      movesLog.textContent = ''; // could populate from moves list (omitted for brevity)
     }
-  };
-// ... Keep other features (friends, leaderboard, notifications, settings, etc) unchanged ...
-// ... End of script ...
-</script>
+
+    // Chessboard.js callbacks for making a move
+    function onDragStart(source, piece) {
+      // do not pick up pieces if the game is over
+      if (!game || game.game_over()) return false;
+
+      // or if it's not that side's turn
+      if ( (game.turn() === 'w' && piece.search(/^b/) !== -1) ||
+           (game.turn() === 'b' && piece.search(/^w/) !== -1) ) {
+        return false;
+      }
+
+      // also ensure player is allowed to move (must be the side and not spectator)
+      if (myColor !== game.turn()) {
+        return false;
+      }
+    }
+
+    function onDrop(source, target) {
+      // attempt move locally
+      const move = game.move({ from: source, to: target, promotion: 'q' });
+      if (move === null) return 'snapback';
+
+      // move succeeded locally — update board to new fen immediately
+      board.position(game.fen());
+      // push move to database so opponent will see
+      const push = {
+        from: move.from,
+        to: move.to,
+        piece: move.piece,
+        san: move.san,
+        flags: move.flags,
+        color: move.color,
+        promotion: move.promotion || null,
+        authorUid: currentUser.uid,
+        ts: firebase.database.ServerValue.TIMESTAMP
+      };
+      matchMovesRef.push(push);
+
+      // update match fen and turn atomically (simple set)
+      const newTurn = game.turn();
+      matchRef.update({
+        fen: game.fen(),
+        turn: newTurn
+      });
+
+      return;
+    }
+
+    function onSnapEnd() {
+      board.position(game.fen());
+    }
+
+    // apply remote move from DB
+    function applyRemoteMove(moveObj) {
+      // apply pretty move using chess.js move object (from,to,promotion)
+      localApplyingRemoteMove = true;
+      const move = game.move({
+        from: moveObj.from,
+        to: moveObj.to,
+        promotion: moveObj.promotion || 'q'
+      });
+      if (move) {
+        board.position(game.fen());
+        matchRef.update({
+          fen: game.fen(),
+          turn: game.turn()
+        });
+      }
+      localApplyingRemoteMove = false;
+    }
+
+    // Leave match (cleanup)
+    btnLeaveMatch.addEventListener('click', async () => {
+      if (!matchId) return;
+      // remove currentMatch from user so they stop watching it
+      try {
+        await db.ref('users/' + currentUser.uid + '/currentMatch').remove();
+      } catch (e) {}
+      cleanupMatchClient();
+      showScreen(homeScreen);
+    });
+
+    function cleanupMatchClient() {
+      if (matchListener && matchRef) { matchRef.off('value', matchListener); matchListener = null; }
+      if (matchMovesChildListener && matchMovesRef) { matchMovesRef.off('child_added', matchMovesChildListener); matchMovesChildListener = null; }
+      matchId = null;
+      matchRef = null;
+      matchMovesRef = null;
+      // reset local game/board but keep them for next match
+      if (board) {
+        board.position('start');
+      }
+      if (game) game.reset();
+      myColor = null;
+    }
+
+    // When page unload, ensure we cleanup waiting entry and presence
+    window.addEventListener('beforeunload', () => {
+      if (waitingRef) waitingRef.remove();
+      if (currentUser) {
+        db.ref('users/' + currentUser.uid + '/presence').remove();
+        db.ref('users/' + currentUser.uid + '/currentMatch').remove();
+      }
+    });
+
+    // Simple helper to create a new Chess instance (not all builds expose Chess.fen())
+    function newChessFallback() {
+      try {
+        return new Chess();
+      } catch (e) {
+        // in case chess.js constructor differs, try window.Chess
+        return typeof Chess !== 'undefined' ? new Chess() : null;
+      }
+    }
+
+    // make sure game variable exists so earlier code is safe
+    game = newChessFallback();
+  </script>
 </body>
-	  </html>
+	</html>
