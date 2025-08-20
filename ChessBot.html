@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="bn">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Play vs Stockfish — Single Page</title>
+
+  <!-- Bootstrap (for quick UI) -->
+  <link rel="stylesheet"
+    href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css"
+    crossorigin="anonymous" />
+
+  <!-- Chessboard.js CSS (CDN) -->
+  <link rel="stylesheet"
+    href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css"
+    crossorigin="anonymous" />
+
+  <style>
+    body { padding: 18px; font-family: "Segoe UI", Roboto, Arial, sans-serif; }
+    #board-wrap { max-width: 480px; margin: 0 auto; }
+    #controls { margin-top: 12px; }
+    .info-row { margin-top: 8px; }
+    #advBar { height: 18px; }
+    .square-highlight { box-shadow: inset 0 0 0 4px rgba(255,193,7,0.6); }
+    .hint-from { outline: 3px solid rgba(0,123,255,0.7); }
+    .hint-to   { outline: 3px solid rgba(40,167,69,0.7); }
+    .status-line { font-weight: 600; }
+    .small-note { font-size: 0.9rem; color: #666; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h3 class="text-center">Play vs Stockfish (single file)</h3>
+    <div class="row">
+      <div class="col-md-6">
+        <div id="board-wrap">
+          <div id="board" style="width: 420px; margin: 0 auto;"></div>
+        </div>
+        <div class="text-center mt-2">
+          <button id="btnNew" class="btn btn-primary btn-sm">New Game</button>
+          <button id="btnUndo" class="btn btn-warning btn-sm">Undo</button>
+          <button id="btnRedo" class="btn btn-secondary btn-sm">Redo</button>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <div id="controls" class="card p-3">
+          <div class="form-group">
+            <label>Play as:</label><br/>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="side" id="sideWhite" value="white" checked>
+              <label class="form-check-label" for="sideWhite">White (you)</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="side" id="sideBlack" value="black">
+              <label class="form-check-label" for="sideBlack">Black (you)</label>
+            </div>
+            <div class="small-note">If you choose Black engine moves first as White.</div>
+          </div>
+
+          <div class="form-group">
+            <label for="selDepth">Engine search depth:</label>
+            <select id="selDepth" class="form-control form-control-sm" style="width:120px;">
+              <option>3</option>
+              <option selected>5</option>
+              <option>7</option>
+              <option>10</option>
+              <option>15</option>
+            </select>
+            <div class="small-note">Higher = stronger & slower.</div>
+          </div>
+
+          <div class="form-group form-check">
+            <input type="checkbox" class="form-check-input" id="chkHint">
+            <label class="form-check-label" for="chkHint">Show hint (ask engine)</label>
+          </div>
+
+          <div class="info-row">
+            <div>Engine status: <span id="engineStatus" class="font-weight-bold">loading...</span></div>
+            <div>Best move (last): <span id="engineBest">—</span></div>
+            <div class="mt-2">Evaluation: <span id="evalText">—</span></div>
+            <div class="progress mt-1">
+              <div id="advBar" class="progress-bar" role="progressbar" style="width:50%"></div>
+            </div>
+            <div class="small-note mt-1">Positive = White advantage (cp), Negative = Black advantage</div>
+          </div>
+
+          <div class="info-row mt-3">
+            <div>Positions evaluated: <span id="posCount">0</span></div>
+            <div>Time taken: <span id="timeTaken">0</span>s</div>
+            <div>Positions/s: <span id="pps">0</span></div>
+          </div>
+
+          <div class="info-row mt-3">
+            <div id="gameStatus" class="status-line">Game status: ready</div>
+          </div>
+
+          <div class="info-row mt-3 small-note">
+            Note: chess.js must be available at js/chess.js (local). chessboard.js & stockfish loaded from CDN.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- jQuery (used by chessboard.js examples) -->
+  <script src="https://code.jquery.com/jquery-3.5.1.min.js" crossorigin="anonymous"></script>
+
+  <!-- chessboard.js (CDN) -->
+  <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"
+    crossorigin="anonymous"></script>
+
+  <!-- local chess.js (you said it's in your directory) -->
+  <script src="js/chess.js"></script>
+
+  <!-- Stockfish CDN (as you provided) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.2/stockfish.js"
+    integrity="sha512-pozZFzL769pqpikSBj51MSntgI9zZYOpmH2EPlr9H2cYUQC8AG5IQkRAkBWZseEab7mjeYnY2J5LrIdA9Wd6yg=="
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+  <script>
+    // Single-file controller
+    document.addEventListener('DOMContentLoaded', function () {
+      // Ensure chess.js is loaded
+      if (typeof Chess === 'undefined') {
+        alert('Error: js/chess.js not found. Please ensure js/chess.js is present.');
+        return;
+      }
+
+      var game = new Chess();
+      var board = null;
+      var boardCfg = {
+        draggable: true,
+        position: 'start',
+        onDragStart: onDragStart,
+        onDrop: onDrop,
+        onSnapEnd: onSnapEnd,
+        pieceTheme: 'https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/img/chesspieces/wikipedia/{piece}.png'
+      };
+      board = Chessboard('board', boardCfg);
+
+      // redo stack for redo button
+      var redoStack = [];
+
+      // engine
+      var engine = null;
+      var engineReady = false;
+      var engineBusy = false;
+      var lastInfo = { cp: null, mate: null, nodes: 0, time: 0 };
+
+      // hint-only flag so bestmove can be shown but not played
+      var hintOnly = false;
+
+      // try to create engine from CDN. support both STOCKFISH and Stockfish globals
+      function createEngine() {
+        try {
+          if (typeof STOCKFISH !== 'undefined') {
+            engine = STOCKFISH();
+          } else if (typeof Stockfish !== 'undefined') {
+            engine = Stockfish();
+          } else if (typeof window.Worker !== 'undefined') {
+            // fallback - not expected because we loaded CDN
+            engine = new Worker('js/stockfish.js');
+          } else {
+            engine = null;
+          }
+        } catch (e) {
+          console.warn('Engine creation error:', e);
+          engine = null;
+        }
+
+        if (!engine) {
+          $('#engineStatus').text('not available');
+          return;
+        }
+
+        engine.onmessage = function (e) {
+          var line = (e && e.data) ? e.data : e;
+          handleEngineLine(line + '');
+        };
+
+        // initialize UCI
+        engine.postMessage('uci');
+        engine.postMessage('isready');
+        $('#engineStatus').text('initializing...');
+      }
+
+      function handleEngineLine(line) {
+        line = line.trim();
+        if (!line) return;
+        // console.log('engine ->', line);
+
+        if (line === 'readyok') {
+          engineReady = true;
+          $('#engineStatus').text('ready');
+          return;
+        }
+        if (line.startsWith('uciok')) {
+          // ignore
+          return;
+        }
+
+        // parse info for cp/mate and nodes/time
+        if (line.indexOf('info') === 0) {
+          // score cp
+          var mCp = line.match(/score cp (-?\d+)/);
+          var mMate = line.match(/score mate (-?\d+)/);
+          var mNodes = line.match(/nodes (\d+)/);
+          var mTime = line.match(/time (\d+)/);
+          if (mCp) lastInfo.cp = parseInt(mCp[1], 10);
+          if (mMate) lastInfo.mate = parseInt(mMate[1], 10);
+          if (mNodes) lastInfo.nodes = parseInt(mNodes[1], 10);
+          if (mTime) lastInfo.time = parseInt(mTime[1], 10);
+          updateEvalDisplay();
+        }
+
+        // bestmove
+        if (line.startsWith('bestmove')) {
+          engineBusy = false;
+          var tokens = line.split(' ');
+          if (tokens.length >= 2) {
+            var best = tokens[1];
+            if (hintOnly) {
+              showHintFromEngine(best);
+              hintOnly = false;
+            } else {
+              applyEngineMove(best);
+            }
+          }
+        }
+      }
+
+      function updateEvalDisplay() {
+        var txt = '—';
+        if (lastInfo.mate !== null) {
+          txt = 'mate ' + lastInfo.mate;
+        } else if (lastInfo.cp !== null) {
+          var cp = lastInfo.cp;
+          txt = (cp >= 0 ? '+' + cp : cp) + ' cp';
+        }
+        $('#engineBest').text(txt);
+        $('#posCount').text(lastInfo.nodes || 0);
+        $('#timeTaken').text(((lastInfo.time || 0)/1000).toFixed(2));
+        var pps = 0;
+        if (lastInfo.time && lastInfo.time > 0) {
+          pps = Math.round(((lastInfo.nodes || 0) * 1000) / lastInfo.time);
+        }
+        $('#pps').text(pps);
+
+        // advantage bar: map cp range -2000..+2000 to 0..100%
+        var cpVal = lastInfo.cp !== null ? lastInfo.cp : 0;
+        var v = Math.max(-2000, Math.min(2000, cpVal));
+        var pct = ((v + 2000) / 4000) * 100;
+        $('#advBar').css('width', pct + '%');
+        $('#evalText').text((lastInfo.cp !== null ? (lastInfo.cp >= 0 ? '+' + lastInfo.cp : lastInfo.cp + '') : '—'));
+      }
+
+      function sendEngine(cmd) {
+        if (!engine) return;
+        engine.postMessage(cmd);
+      }
+
+      function sendPositionToEngine() {
+        if (!engine) return;
+        sendEngine('position fen ' + game.fen());
+      }
+
+      function tellEngineGo(depth) {
+        if (!engine) return;
+        lastInfo = { cp: null, mate: null, nodes: 0, time: 0 };
+        updateEvalDisplay();
+        sendEngine('ucinewgame');
+        sendPositionToEngine();
+        sendEngine('go depth ' + depth);
+        engineBusy = true;
+        $('#engineStatus').text('thinking...');
+      }
+
+      function applyEngineMove(best) {
+        if (!best || best === '(none)') return;
+        var from = best.slice(0,2);
+        var to = best.slice(2,4);
+        var prom = best.length > 4 ? best[4] : undefined;
+        var moveObj = { from: from, to: to };
+        if (prom) moveObj.promotion = prom.toLowerCase();
+        var mv = game.move(moveObj);
+        if (mv) {
+          redoStack = []; // clear redo after new move
+          board.position(game.fen());
+          updateGameStatus();
+          highlightLastMove(moveObj.from, moveObj.to, 'engine');
+        } else {
+          console.warn('Engine move illegal for current position:', best, 'fen:', game.fen());
+        }
+      }
+
+      // when hintOnly bestmove arrives
+      function showHintFromEngine(best) {
+        if (!best || best === '(none)') return;
+        var from = best.slice(0,2);
+        var to = best.slice(2,4);
+        $('#engineBest').text(from + '→' + to + '   (hint)');
+        // highlight from/to briefly
+        flashHint(from, to);
+        engineBusy = false;
+        $('#engineStatus').text('ready');
+      }
+
+      function flashHint(from, to) {
+        // use chessboard's DOM squares
+        var $from = $('#board .square-' + from);
+        var $to = $('#board .square-' + to);
+        $from.addClass('hint-from');
+        $to.addClass('hint-to');
+        setTimeout(function(){
+          $from.removeClass('hint-from');
+          $to.removeClass('hint-to');
+        }, 1200);
+      }
+
+      // highlight last move (simple CSS)
+      function highlightLastMove(from, to, who) {
+        // remove any previous highlight class
+        $('#board .square-55d63').removeClass('square-highlight');
+        $('#board .square-' + from).addClass('square-highlight');
+        $('#board .square-' + to).addClass('square-highlight');
+      }
+
+      // UI helper: get which side human plays
+      function humanPlaysWhite() {
+        return document.getElementById('sideWhite').checked;
+      }
+
+      // main: when human finishes a move
+      function onDrop(source, target, piece, newPos, oldPos, orientation) {
+        // try move
+        var move = game.move({ from: source, to: target, promotion: 'q' });
+        if (move === null) return 'snapback';
+
+        // successful move: clear redo stack
+        redoStack = [];
+
+        board.position(game.fen());
+        updateGameStatus();
+        highlightLastMove(move.from, move.to, 'human');
+
+        // If engine plays the other side, ask engine to move (unless game over)
+        if (!game.game_over()) {
+          // If human is white and human moved and engine is black -> engine move
+          // If human is black and human moved -> engine move if engine is white? Actually engine plays opposite of human.
+          // We simply ask the engine to move if it's engine's turn.
+          if ((humanPlaysWhite() && game.turn() === 'b') || (!humanPlaysWhite() && game.turn() === 'w')) {
+            // small delay
+            setTimeout(function () {
+              if (engineReady && !engineBusy) {
+                var depth = parseInt(document.getElementById('selDepth').value, 10) || 5;
+                tellEngineGo(depth);
+              }
+            }, 220);
+          }
+        } else {
+          updateGameStatus();
+        }
+      }
+
+      function onDragStart(source, piece, position, orientation) {
+        // prevent moving opponent pieces
+        if (game.game_over()) return false;
+        if (humanPlaysWhite()) {
+          if (piece.search(/^b/) !== -1) return false;
+        } else {
+          if (piece.search(/^w/) !== -1) return false;
+        }
+        // block moving while engine is thinking
+        if (engineBusy) return false;
+      }
+
+      function onSnapEnd() {
+        board.position(game.fen());
+      }
+
+      // controls: New game
+      document.getElementById('btnNew').addEventListener('click', function () {
+        game.reset();
+        board.start();
+        redoStack = [];
+        lastInfo = { cp: null, mate: null, nodes: 0, time: 0 };
+        updateEvalDisplay();
+        updateGameStatus();
+        // if engine plays white and human chose black, engine should move first
+        setTimeout(function () {
+          if (!humanPlaysWhite()) {
+            if (engineReady && !engineBusy) {
+              tellEngineGo(parseInt(document.getElementById('selDepth').value, 10) || 5);
+            }
+          }
+        }, 250);
+      });
+
+      // Undo / Redo
+      var undoStack = [];
+      document.getElementById('btnUndo').addEventListener('click', function () {
+        if (game.history().length === 0) return;
+        var last = game.undo();
+        if (last) {
+          undoStack.push(last);
+          redoStack.push(last);
+          board.position(game.fen());
+          updateGameStatus();
+        }
+      });
+      document.getElementById('btnRedo').addEventListener('click', function () {
+        if (redoStack.length === 0) return;
+        // redoStack contains pretty move objects returned from undo; they include .from/.to/.promotion maybe
+        var mv = redoStack.pop();
+        if (!mv) return;
+        try {
+          game.move({ from: mv.from, to: mv.to, promotion: mv.promotion || 'q' });
+          board.position(game.fen());
+          updateGameStatus();
+        } catch (e) {
+          console.warn('Redo failed', e);
+        }
+      });
+
+      // Hint checkbox
+      document.getElementById('chkHint').addEventListener('change', function () {
+        if (this.checked) {
+          // only allow hint when engine ready and it's human's turn (usually white) or always allow suggestion for side-to-move
+          if (engineReady && !engineBusy) {
+            hintOnly = true;
+            sendPositionToEngine();
+            sendEngine('go depth ' + (parseInt(document.getElementById('selDepth').value,10) || 5));
+            $('#engineStatus').text('thinking (hint)...');
+          }
+        } else {
+          // clear any hint highlight
+          $('#board .hint-from').removeClass('hint-from');
+          $('#board .hint-to').removeClass('hint-to');
+        }
+      });
+
+      // Update game status text
+      function updateGameStatus() {
+        var status = '';
+        if (game.in_checkmate()) {
+          status = 'Checkmate. ' + (game.turn() === 'w' ? 'Black wins' : 'White wins');
+        } else if (game.in_draw()) {
+          status = 'Draw';
+        } else {
+          status = 'Playing — ' + (game.turn() === 'w' ? 'White to move' : 'Black to move');
+          if (game.in_check()) status += ' (check)';
+        }
+        document.getElementById('gameStatus').textContent = 'Game status: ' + status;
+      }
+
+      // If engine was ready and it's engine's turn at start (depending on chosen side), make engine play
+      createEngine();
+      // Wait for engine ready; poll for a short time to kick off first move if needed
+      var readyPoll = setInterval(function () {
+        if (engineReady) {
+          clearInterval(readyPoll);
+          $('#engineStatus').text('ready');
+          // on page load, if human chooses black the engine should play first
+          if (!humanPlaysWhite()) {
+            setTimeout(function () {
+              var depth = parseInt(document.getElementById('selDepth').value, 10) || 5;
+              tellEngineGo(depth);
+            }, 200);
+          }
+        }
+      }, 200);
+
+      // If user changes side selection mid-game, we won't automatically flip board or moves; user should New Game to apply.
+      // Keep UI consistent:
+      updateGameStatus();
+
+      // Expose onDrop/onDragStart/onSnapEnd to chessboard config
+      window.onDrop = onDrop;
+      window.onDragStart = onDragStart;
+      window.onSnapEnd = onSnapEnd;
+    }); // DOMContentLoaded
+  </script>
+</body>
+</html>
